@@ -2822,3 +2822,28 @@ nav .nav-out .ni{background:transparent!important;box-shadow:none!important;colo
 .shr-act{display:flex;gap:10px;padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px))}
 .shr-b{flex:1;padding:13px;border-radius:14px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-weight:800;font-size:15px}
 .shr-b.p{background:var(--ac);color:var(--on);border-color:var(--ac)}
+
+/* ===== Üst alan sıkıştırma: akış ilk ekranda daha erken görünsün ===== */
+.mecard{padding:8px 12px;gap:10px;margin:0 0 8px;border-radius:16px}
+.mecard .me-ring .av.l{width:44px;height:44px;font-size:15px}
+.me-mid b{font-size:15px}
+.me-bar{margin-top:5px}
+.me-bt{margin-top:2px;font-size:10.5px}
+.me-pt b{font-size:22px}
+.me-pt small{margin-top:2px}
+.me-rk{margin-top:3px}
+.live{margin:0 0 8px}
+.tvcard{padding:6px 10px;gap:10px;margin:0 0 8px;border-radius:12px;box-shadow:0 8px 0 0 var(--bg)}
+.tv-ic{width:30px;height:30px;border-radius:9px}
+.tv-ic svg{width:18px;height:18px}
+.tv-t{flex-direction:row;align-items:baseline;gap:8px;overflow:hidden}
+.tv-t b{font-size:13.5px;white-space:nowrap}
+.tv-t small{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-go{padding:4px 9px}
+#people{margin:8px 0 0}
+.st-head{margin-bottom:6px}
+/* Öne çıkan tahminciler: 1-2-3 sıra rozeti */
+.st-rk{position:absolute;left:-3px;top:-3px;z-index:7;min-width:20px;height:20px;padding:0 5px;border-radius:99px;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:800;line-height:1;color:#fff;background:#8b95a7;border:2px solid var(--bg)}
+.st-rk.r1{background:linear-gradient(135deg,#f6c343,#b8860b)}
+.st-rk.r2{background:linear-gradient(135deg,#d7dee9,#8794a8)}
+.st-rk.r3{background:linear-gradient(135deg,#e0a46a,#9a5b27);}
