@@ -257,5 +257,19 @@ async function fillRes(p){
       arcDel += Math.min(400, old.docs.length - i);
     }
   } catch (e) { console.warn('arşiv temizliği yapılamadı', e.message); }
-  console.log(`Bitti. ${DRY ? '(DENEME) ' : ''}Silinen: ${deleted}, puanı işlenen: ${banked}, sonuçları kupona yazılan: ${filledCnt}, silinen eski sonuç arşivi: ${arcDel}, silinen gizli paylaşım: ${hidDel}, TJK'dan çekilen gün: ${tjkCalls}`);
+  // Genel sohbet: her gece sıfırlanır (çalışma anından önce yazılan tüm mesajlar silinir)
+  let chatDel = 0;
+  try {
+    const cut = Date.now();
+    for (;;) {
+      const q = await db.collection('chat').where('ts', '<', cut).limit(400).get();
+      if (q.empty) break;
+      if (DRY) { chatDel += q.size; if (q.size < 400) break; else { console.log('DENEME: 400+ sohbet mesajı var, sayım kesildi'); break; } }
+      const batch = db.batch();
+      q.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      chatDel += q.size;
+    }
+  } catch (e) { console.warn('sohbet temizliği yapılamadı', e.message); }
+  console.log(`Bitti. ${DRY ? '(DENEME) ' : ''}Silinen: ${deleted}, puanı işlenen: ${banked}, sonuçları kupona yazılan: ${filledCnt}, silinen eski sonuç arşivi: ${arcDel}, silinen gizli paylaşım: ${hidDel}, TJK'dan çekilen gün: ${tjkCalls}, silinen sohbet mesajı: ${chatDel}`);
 })().catch(e => { console.error(e); process.exit(1); });
