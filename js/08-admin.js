@@ -312,19 +312,40 @@ function admUnban(uid){
 function admDelete(uid){
   if(!FB.isAdmin || uid === FB.uid) return;
   const u = FB.users[uid] || {}, name = u.name || 'Kullanıcı';
-  askConfirm('Hesabı sil: ' + name, 'Profili, paylaşımları, yorumları ve kullanıcı adı silinir. Aynı hesapla bir daha giriş yapamaz. Bu işlem geri alınamaz. Emin misin?', 'Hesabı sil', async () => {
+  askConfirm('Hesabı sil: ' + name, 'Profili, kullanıcı adı, paylaşımları, yorumları, beğenileri, sohbet mesajları, bildirimleri ve takip kayıtları silinir. Aynı hesapla bir daha giriş yapamaz. Bu işlem geri alınamaz. Emin misin?', 'Hesabı sil', async () => {
     try{
-      const B = FB.db.batch();
-      (FB.rawPosts || []).forEach(r => {
-        if(r.uid === uid) B.delete(fbDoc('posts', r.docId));
-        else if((r.comments || []).some(c => c.uid === uid)) B.update(fbDoc('posts', r.docId), {comments: r.comments.filter(c => c.uid !== uid)});
+      const FV = firebase.firestore.FieldValue, col = c => FB.db.collection(c);
+      const ops = [], seen = new Set();
+      const del = ref => { if(!seen.has(ref.path)){ seen.add(ref.path); ops.push({ref}); } };
+      const upd = (ref, data) => ops.push({ref, data});
+      // 0) önce yasak kaydı: işlem yarıda kesilse bile hesap hemen kapanır
+      ops.push({ref: fbDoc('bans', uid), set: {until: 0, reason: 'Hesap yönetici tarafından silindi', deleted: true, by: FB.uid, at: Date.now(), name: u.name || '', handle: u.handle || ''}});
+      // 1) paylaşımlar (hepsi, son 100 ile sınırlı değil) + başkalarının kuponlarındaki yorum ve beğeniler
+      (await col('posts').get()).docs.forEach(d => {
+        const r = d.data(); if(!r) return;
+        if(r.uid === uid){ del(d.ref); return; }
+        const x = {};
+        if((r.comments || []).some(c => c && c.uid === uid)) x.comments = r.comments.filter(c => !(c && c.uid === uid));
+        if((r.likedBy || []).includes(uid)) x.likedBy = r.likedBy.filter(v => v !== uid);
+        if(Object.keys(x).length) upd(d.ref, x);
       });
-      if(u.handle) B.delete(fbDoc('handles', String(u.handle).replace(/^@/, '').toLowerCase()));
-      B.delete(fbDoc('userMeta', uid));
-      B.set(fbDoc('bans', uid), {until: 0, reason: 'Hesap yönetici tarafından silindi', deleted: true, by: FB.uid, at: Date.now(), name: u.name || '', handle: u.handle || ''});
-      B.delete(fbDoc('users', uid));
-      await B.commit();
-      showToast(name + ' hesabı silindi');
+      // 2) sohbet mesajları ve bildirimler (gönderdiği + aldığı)
+      for(const q of [col('chat').where('uid', '==', uid), col('notifs').where('from', '==', uid), col('notifs').where('to', '==', uid)])
+        (await q.get()).docs.forEach(d => del(d.ref));
+      if(u.handle) del(fbDoc('handles', String(u.handle).replace(/^@/, '').toLowerCase()));
+      // 3) diğer kullanıcıların takip listesindeki kayıt
+      (await col('users').get()).docs.forEach(d => {
+        if(d.id === uid) return;
+        if(((d.data() || {}).following || []).includes(uid)) upd(d.ref, {following: FV.arrayRemove(uid), ['fts.' + uid]: FV.delete()});
+      });
+      // 4) profil ve yan kayıtlar
+      ['userMeta', 'grants', 'mods', 'users'].forEach(c => del(fbDoc(c, uid)));
+      for(let i = 0; i < ops.length; i += 400){
+        const B = FB.db.batch();
+        ops.slice(i, i + 400).forEach(o => o.set ? B.set(o.ref, o.set) : o.data ? B.update(o.ref, o.data) : B.delete(o.ref));
+        await B.commit();
+      }
+      showToast(name + ' hesabı ve tüm verileri silindi');
     }catch(e){ showToast(fbErr(e)); }
   });
 }
