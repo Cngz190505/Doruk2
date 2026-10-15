@@ -389,7 +389,16 @@ function maintEval(){
   } else if(b) b.remove();
   if(typeof admOpen !== 'undefined' && admOpen) try{ renderAdmin(true); }catch(e){}
 }
-function maintAdminLogin(){ window.__maintAdm = true; maintEval(); try{ showAuth(); }catch(e){} }
+function maintAdminLogin(){
+  window.__maintAdm = true;
+  const go = () => { maintEval(); try{ showAuth(); }catch(e){} };
+  if(FB.uid && !FB.isAdmin){   // yönetici olmayan bir hesapla oturum açıksa önce çıkış yap, yoksa giriş ekranı hiç açılmaz
+    try{ fbSignOut(); }catch(e){}
+    let n = 0; const t = setInterval(() => { if(!FB.uid || ++n > 20){ clearInterval(t); go(); } }, 150);
+    return;
+  }
+  go();
+}
 function admMaintCard(){
   const on = !!(FB.maint && FB.maint.on);
   return `<div class="ad-mt ${on ? 'on' : ''}"><span class="ad-mt-i">🛠</span><div class="ad-mt-t"><b>Bakım modu <em>${on ? 'Açık' : 'Kapalı'}</em></b><small>${on ? 'Site herkese kapalı. Sen yönetici olarak girebiliyorsun.' : 'Site herkese açık.'}</small></div><button type="button" class="ad-mt-b" onclick="admMaintToggle()">${on ? 'Bakımı kapat' : 'Siteyi bakıma al'}</button></div>`;
