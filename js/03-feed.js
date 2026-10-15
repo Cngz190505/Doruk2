@@ -468,15 +468,15 @@ function demoPeople(){
   }).join('')}</div>`;
 }
 function peopleStrip(){
-  const all = Object.keys(USERS).filter(n => n !== ME).map(n => ({n, s: scoreOf(n)}))
+  const all = Object.keys(USERS).map(n => ({n, s: scoreOf(n)}))   // kendin de listede: sıradaki yerini görürsün
     .filter(x => x.s.pts > 0)   // sadece puanı olanlar sıralamaya girer
     .sort((a, b) => b.s.pts - a.s.pts || b.s.pct - a.s.pct || a.n.localeCompare(b.n, 'tr'));
   const names = all.slice(0, 5);   // akışta ilk 5 kişi; fazlası Liderler'de
   if(!names.length && !FB_ON){ demoPeople(); return; }
   if(!names.length){ $('people').innerHTML = '<div class="st-head"><h3>Öne Çıkan Tahminciler</h3><small>Puana göre</small></div><div class="hint" style="margin:0 2px 4px">Henüz puan alan yok. Kuponu tutan ilk kişi burada görünecek.</div>'; return; }
   $('people').innerHTML = `<div class="st-head"><h3>Öne Çıkan Tahminciler</h3><small>Puana göre</small></div><div class="st-strip">${names.map(({n, s}, i) => `<div class="st-item">
-    <span class="st-av ${following[n] ? 'on' : ''}" onclick="openProfile('${n}', true)"><i class="st-rk r${i + 1}">${i + 1}</i><span class="ring">${av(n,'l')}</span>${following[n] ? '' : `<button class="st-plus" onclick="event.stopPropagation();toggleFollow('${n}')" aria-label="Takip et">+</button>`}</span>
-    <b onclick="openProfile('${n}')">${esc(n.split(' ')[0])}</b><small style="color:${s.pts ? 'var(--ac)' : 'var(--mu)'}">${fmtPts(s.pts)} puan</small><small>${s.tot ? '%' + s.pct + ' isabet' : 'henüz yok'}</small></div>`).join('')}${all.length > 5 ? `<div class="st-item st-all" onclick="switchTab('leaderboard')"><span class="st-av"><span class="ring"><span class="st-allc">›</span></span></span><b>Tümü</b><small>Sıralama</small></div>` : ''}</div>`;
+    <span class="st-av ${following[n] ? 'on' : ''}" onclick="openProfile('${n}', true)"><i class="st-rk r${i + 1}">${i + 1}</i><span class="ring">${av(n,'l')}</span>${following[n] || n === ME ? '' : `<button class="st-plus" onclick="event.stopPropagation();toggleFollow('${n}')" aria-label="Takip et">+</button>`}</span>
+    <b onclick="openProfile('${n}')">${n === ME ? 'Sen' : esc(n.split(' ')[0])}</b><small style="color:${s.pts ? 'var(--ac)' : 'var(--mu)'}">${fmtPts(s.pts)} puan</small><small>${s.tot ? '%' + s.pct + ' isabet' : 'henüz yok'}</small></div>`).join('')}${all.length > 5 ? `<div class="st-item st-all" onclick="switchTab('leaderboard')"><span class="st-av"><span class="ring"><span class="st-allc">›</span></span></span><b>Tümü</b><small>Sıralama</small></div>` : ''}</div>`;
 }
 
 function renderMeCard(){
