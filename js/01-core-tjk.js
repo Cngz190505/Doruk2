@@ -1185,18 +1185,31 @@ async function atSonGalibiyet(atId) {
 // Tablodaki en yeni tarihli idman satırını bulur; sütun başlıklarına göre okur (sıra/sütun sayısı değişse de çalışsın diye).
 // Dönüş: {t:'12.10.2026', d:'800 m 52.4', y:'İzmir · Kum'} | {n:1} (idman kaydı yok) | null (sayfa/tablo okunamadı)
 async function atSonGalop(atId) {
-  const url = `https://www.tjk.org/TR/YarisSever/Query/Page/IdmanIstatistikleri?QueryParameter_AtId=${encodeURIComponent(atId)}`;
+  const id = encodeURIComponent(atId);
+  const urls = [
+    `https://www.tjk.org/TR/YarisSever/Query/Page/IdmanIstatistikleri?QueryParameter_AtId=${id}`,
+    `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtIdmanBilgileri?1=1&QueryParameter_AtId=${id}`,
+    `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/IdmanIstatistikleri?1=1&QueryParameter_AtId=${id}`
+  ];
+  const hatalar = [];
+  for (const url of urls) {
+    try { return await galopOku(url); } catch (e) { hatalar.push(String((e && e.message) || e)); }
+  }
+  throw new Error(hatalar.map((h, i) => (i + 1) + ') ' + h).join(' '));
+}
+async function galopOku(url) {
   const html = await (await fetchWithTimeout(url, 20000, 1)).text();
   const dom = new DOMParser().parseFromString(html, 'text/html');
   const norm = s => String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const gorulen = [];
   const ts = t => { const m = /(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/.exec(t); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; };
   for (const tb of dom.querySelectorAll('table')) {
     const rows = Array.from(tb.querySelectorAll('tr'));
     const hi = rows.findIndex(tr => /tarih/i.test(norm(tr.textContent)) && tr.querySelector('th,td'));
     if (hi < 0) continue;
     const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent));
-    const iT = heads.findIndex(h => /^tarih/i.test(h));
-    if (iT < 0) continue;
+    const iT = heads.findIndex(h => /tarih/i.test(h));
+    if (iT < 0) { gorulen.push(heads.join('|').slice(0, 70)); continue; }
     let best = null, bt = 0;
     for (let i = hi + 1; i < rows.length; i++) {
       const td = Array.from(rows[i].querySelectorAll('td')); if (td.length <= iT) continue;
@@ -1214,7 +1227,7 @@ async function atSonGalop(atId) {
     });
     return { t: norm(best[iT].textContent), d: det.join(' · '), y: yer.join(' · ') };
   }
-  throw new Error('tabloda Tarih sütunu yok (' + html.length + ' bayt)');
+  throw new Error('Tarih sütunu yok, ' + dom.querySelectorAll('table').length + ' tablo, ' + html.length + ' bayt' + (gorulen.length ? ': ' + gorulen[0] : ''));
 }
 return { atSonGalibiyet, atSonGalop, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();

@@ -298,7 +298,7 @@ function galipYukle(root){
       TJK[o.fn](id).then(r => {
         if(r){ o.c[id] = Object.assign({ts: Date.now()}, r); galipSave(k); delete o.fail[id]; }
         else o.fail[id] = Date.now();
-      }).catch(e => { o.fail[id] = Date.now(); o.err[id] = String((e && e.message) || e).slice(0, 80); }).finally(() => {
+      }).catch(e => { o.fail[id] = Date.now(); o.err[id] = String((e && e.message) || e).slice(0, 260); }).finally(() => {
         o.run--; delete o.busy[id];
         galipRefresh(k, id);
         galipYukle(document);
