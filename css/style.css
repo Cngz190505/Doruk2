@@ -2959,11 +2959,26 @@ html .maint-ov .mt-dot{animation:mtBlink 1.4s ease-out infinite!important}
 body.maint #splash{display:none!important}
 body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 
-/* ===== Otomatik genişlik: ekrana göre büyür ===== */
-:root{ --appw:clamp(500px, 62vw, 1000px); }
-
-.app{ max-width:var(--appw) !important; }
-nav{ max-width:var(--appw) !important; }
-.dr{ max-width:calc(var(--appw) - 32px) !important; }
-.sheet-card,
-.cms-card{ max-width:var(--appw) !important; }
+/* ===== Tam sayfa düzeni: geniş ekranda kart çerçevesi kalkar, içerik ortada okunaklı kalır ===== */
+@media (min-width:900px){
+  :root{
+    --cw:1280px;                                   /* içerik en fazla bu kadar geniş */
+    --gx:max(24px, calc((100vw - var(--cw)) / 2)); /* iki yandaki boşluk: ekran büyüdükçe otomatik artar */
+  }
+  body{ padding:0 !important; }
+  .app{
+    max-width:none !important; width:100%;
+    border:0 !important; border-radius:0 !important; box-shadow:none !important;
+    overflow:visible !important; min-height:100vh; min-height:100dvh;
+    padding-left:var(--gx); padding-right:var(--gx);
+  }
+  nav{
+    max-width:none !important; left:0; right:0;
+    border-radius:0 !important;
+    padding-left:max(8px, calc((100vw - 760px) / 2));
+    padding-right:max(8px, calc((100vw - 760px) / 2));
+  }
+  .dr{ max-width:none !important; left:var(--gx); right:var(--gx); }
+  .sheet-card,
+  .cms-card{ max-width:760px !important; }
+}
