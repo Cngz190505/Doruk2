@@ -5,14 +5,15 @@ function fbLoad(){
   return new Promise((res, rej) => {
     if(window.firebase && firebase.apps) return res();
     const srcs = ['app','auth','firestore'].map(n => 'https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-' + n + '-compat.js');
-    let i = 0;
-    const next = () => {
-      if(i >= srcs.length) return res();
+    // 3 dosya aynı anda iner, sırayla çalışır (async=false): sıralı indirmeye göre daha hızlı açılır
+    let left = srcs.length;
+    srcs.forEach(src => {
       const s = document.createElement('script');
-      s.src = srcs[i++]; s.onload = next; s.onerror = () => rej(new Error('Firebase yüklenemedi'));
+      s.src = src; s.async = false;
+      s.onload = () => { if(--left === 0) res(); };
+      s.onerror = () => rej(new Error('Firebase yüklenemedi'));
       document.head.appendChild(s);
-    };
-    next();
+    });
   });
 }
 const FB_ERR = {
@@ -104,12 +105,26 @@ async function fbAuth(b, reg){
   }catch(e){ throw new Error(fbErr(e)); }
   finally{ FB.busy = false; }
 }
+// APK (Capacitor) içinde mi? Eklenti yüklüyse native Google girişi kullanılır
+const fbNative = () => !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.Plugins && Capacitor.Plugins.FirebaseAuthentication);
+async function fbGoogleCred(){
+  if(!fbNative()) return FB.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());   // web / PWA: eskisi gibi
+  try{
+    const r = await Capacitor.Plugins.FirebaseAuthentication.signInWithGoogle();            // uygulamanın kendi hesap seçici penceresi
+    const idToken = r && r.credential && r.credential.idToken;
+    if(!idToken) throw new Error('cancel');
+    return await FB.auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(idToken));
+  }catch(e){
+    if(!e.code && /cancel/i.test(e.message || '')) e.code = 'auth/popup-closed-by-user';
+    throw e;
+  }
+}
 function fbGoogle(){
   if(!FB.ready) return showToast('Sunucuya bağlanılamadı.');
   authRun(async () => {
     FB.busy = true;
     try{
-      const cred = await FB.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+      const cred = await fbGoogleCred();
       const p = (await fbLoadProfile(cred.user.uid)) || await fbEnsureProfile(cred.user);
       fbStart(cred.user.uid, p);
       return {token:'fb', user:{name:p.name, handle:p.handle, email:cred.user.email || ''}};
@@ -160,7 +175,7 @@ function fbStop(){
   FB.adminChecked = false; try{ maintEval(); }catch(e){}
 }
 function fbSignOut(){
-  const done = () => { fbStop(); if(FB.auth) FB.auth.signOut().catch(() => {}); };
+  const done = () => { fbStop(); if(FB.auth) FB.auth.signOut().catch(() => {}); if(fbNative()) Capacitor.Plugins.FirebaseAuthentication.signOut().catch(() => {}); };
   if(FB.uid) fbMeta({lastLogout: Date.now(), lastSeen: Date.now()}).then(done, done); else done();
 }
 
