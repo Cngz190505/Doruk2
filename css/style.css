@@ -2996,3 +2996,6 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 .hgal b{font-size:15px;font-weight:800;color:#e8890c;line-height:1.25}
 .hgal b.gm{font-size:12.5px;font-weight:700;opacity:.85}
 .hgal span{font-size:12px;font-weight:600;color:#e8890c;text-align:right;min-width:0;overflow-wrap:anywhere}
+
+.hgal.hgop{background:rgba(37,99,235,.10)}
+.hgal.hgop small,.hgal.hgop b,.hgal.hgop span{color:#2563eb}
