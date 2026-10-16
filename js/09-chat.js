@@ -103,7 +103,7 @@ function openChat(){
   if(!_chH){ try{ history.pushState({gschat: 1}, ''); _chH = true; }catch(e){} }
   chat.open = true; chat.unread = 0; chatSeenSet(Date.now()); chatBadge();
   $('chsheet').classList.remove('hidden'); $('chat-fab').classList.add('hidden');
-  $('ch-list').innerHTML = '<div class="ch-empty">Yükleniyor…</div>';
+  if(chat.msgs && chat.msgs.length) renderChat(); else $('ch-list').innerHTML = '<div class="ch-empty">Yükleniyor…</div>';   // önceki mesajlar anında, güncel liste arkadan gelir
   chatListen(true);
   chatFit();
   chatLockEval();
@@ -114,19 +114,22 @@ function closeChat(silent){
   chat.open = false; chatSeenSet(Date.now()); cancelChatEdit(); clearChatReply(); $('chsheet').classList.add('hidden'); chatFitReset();
   if(chatOK()){ $('chat-fab').classList.remove('hidden'); chatListen(false); }
 }
+const _chDayF = new Intl.DateTimeFormat('tr-TR', {day: 'numeric', month: 'long'});
+const _chTimeF = new Intl.DateTimeFormat('tr-TR', {hour: '2-digit', minute: '2-digit'});
 function renderChat(){
   const el = $('ch-list'); if(!el || !chat.open) return;
   const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   const L = chat.msgs;
+  const days = L.map(m => new Date(m.ts || 0).toDateString());
   let prevDay = '', lastMine = false, html = '';
   L.forEach((m, i) => {
-    const d = new Date(m.ts || 0), day = d.toDateString(), mine = m.uid === chatUid();
-    if(day !== prevDay){ html += `<div class="ch-day"><span>${esc(d.toLocaleDateString('tr-TR', {day: 'numeric', month: 'long'}))}</span></div>`; prevDay = day; }
+    const d = new Date(m.ts || 0), day = days[i], mine = m.uid === chatUid();
+    if(day !== prevDay){ html += `<div class="ch-day"><span>${esc(_chDayF.format(d))}</span></div>`; prevDay = day; }
     const p = L[i - 1], n = L[i + 1], GAP = 5 * 60000;
-    const samePrev = p && p.uid === m.uid && new Date(p.ts || 0).toDateString() === day && (m.ts - p.ts) < GAP;
-    const sameNext = n && n.uid === m.uid && new Date(n.ts || 0).toDateString() === day && (n.ts - m.ts) < GAP;
+    const samePrev = p && p.uid === m.uid && days[i - 1] === day && (m.ts - p.ts) < GAP;
+    const sameNext = n && n.uid === m.uid && days[i + 1] === day && (n.ts - m.ts) < GAP;
     const key = mine ? ME : FB.keyOf[m.uid], name = key && USERS[key] ? dn(key) : (m.n || 'Kullanıcı');
-    const hm = d.toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'});
+    const hm = _chTimeF.format(d);
     const delB = (mine || FB.isAdmin) ? `<button class="ch-do" onclick="event.stopPropagation();askConfirm('Mesaj silinsin mi?','Bu mesaj sohbetten kaldırılacak.','Sil',()=>delChat('${esc(m.id)}'))" aria-label="Sil">${ic('trash',14)}</button>` : '';
     const rpB = `<button class="ch-do" onclick="event.stopPropagation();setChatReply('${esc(m.id)}')" aria-label="Yanıtla"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 016 6v3"/></svg></button>`;
     const edB = mine ? `<button class="ch-do" onclick="event.stopPropagation();startChatEdit('${esc(m.id)}')" aria-label="Düzenle">${ic('pen',14)}</button>` : '';
