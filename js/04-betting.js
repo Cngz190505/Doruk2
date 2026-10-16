@@ -254,18 +254,64 @@ function takiChips(d){
     return `<button class="tkc" data-t="${esc(ac)}" onclick="event.stopPropagation();takiTip(this)"><b>${esc(x.k)}</b></button>`;
   }).join('')}</div>`;
 }
-const _detOpen = new Set();
+// ---- Son galibiyet (at profilinden, cihazda 12 saat saklanır) ----
+const GALIP_TTL = 12 * 3600 * 1000;
+let GALIP = {};
+try{ GALIP = JSON.parse(localStorage.getItem('gs_galip_v1') || '{}') || {}; }catch(e){ GALIP = {}; }
+const _galipFail = {}, _galipBusy = {};
+const galipGet = id => { const g = GALIP[id]; return g && Date.now() - g.ts < GALIP_TTL ? g : null; };
+function galipSave(){ try{ localStorage.setItem('gs_galip_v1', JSON.stringify(GALIP)); }catch(e){} }
+function galipGun(t){
+  const m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t || ''); if(!m) return '';
+  const n = Math.floor((new Date().setHours(0,0,0,0) - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
+  if(!(n >= 0)) return '';
+  return n === 0 ? 'Bugün' : n === 1 ? 'Dün' : n < 60 ? n + ' gün önce' : n < 730 ? Math.round(n / 30) + ' ay önce' : Math.floor(n / 365) + ' yıl önce';
+}
+function galipInner(id){
+  const g = galipGet(id);
+  if(!g) return _galipFail[id] && Date.now() - _galipFail[id] < 600000
+    ? '<div><small>Son galibiyet</small><b class="gm">Alınamadı</b></div>'
+    : '<div><small>Son galibiyet</small><b class="gm">Aranıyor…</b></div>';
+  if(g.n) return '<div><small>Son galibiyet</small><b class="gm">Kayıtlı galibiyeti yok</b></div>';
+  const gun = galipGun(g.t);
+  return `<div><small>Son galibiyet${gun ? ' · ' + esc(gun) : ''}</small><b>${esc(g.t)}${g.d ? ' · ' + esc(g.d) : ''}</b></div>${g.y ? `<span>${esc(g.y)}</span>` : ''}`;
+}
+const galipBlock = d => d && d.atId ? `<div class="hgal" data-id="${esc(d.atId)}">${galipInner(d.atId)}</div>` : '';
+// Ekrandaki koşunun atları için eksik olanları sırayla (3 paralel) çeker, geldikçe kartı yerinde günceller
+let _galipQ = [], _galipRun = 0;
+function galipYukle(root){
+  root.querySelectorAll('.hgal[data-id]').forEach(el => {
+    const id = el.dataset.id;
+    if(galipGet(id) || _galipBusy[id]) return;
+    if(_galipFail[id] && Date.now() - _galipFail[id] < 600000) return;
+    _galipBusy[id] = 1; _galipQ.push(id);
+  });
+  while(_galipRun < 3 && _galipQ.length){
+    const id = _galipQ.shift(); _galipRun++;
+    TJK.atSonGalip(id).then(r => {
+      if(r){ GALIP[id] = Object.assign({ts: Date.now()}, r); galipSave(); delete _galipFail[id]; }
+      else _galipFail[id] = Date.now();
+    }).catch(() => { _galipFail[id] = Date.now(); }).finally(() => {
+      _galipRun--; delete _galipBusy[id];
+      document.querySelectorAll('.hgal[data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(id); });
+      galipYukle(document);
+    });
+    document.querySelectorAll('.hgal[data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(id); });
+  }
+}
+// Detay panelleri varsayılan AÇIK; kullanıcının kapattıkları burada tutulur
+const _detClosed = new Set();
 const detKey = h => city + '|' + race + '|' + h.no;
 // Açılır paneller: sınıf değişir, yükseklik CSS ile yumuşak animasyonlanır (yeniden çizim yok → zıplama yok)
 function animTg(btn, set){
   const box = btn.parentElement, k = box.dataset.k; if(!k) return;
   const open = box.classList.toggle('open');
   btn.setAttribute('aria-expanded', open);
-  if(open) set.add(k); else set.delete(k);
+  if(open) set.delete(k); else set.add(k);
 }
-function detTg(btn){ animTg(btn, _detOpen); }
-const _moreOpen = new Set();
-function moreTg(btn){ animTg(btn, _moreOpen); }
+function detTg(btn){ animTg(btn, _detClosed); }
+const _moreClosed = new Set();
+function moreTg(btn){ animTg(btn, _moreClosed); }
 function infoPanel(h){
   const d = h.d; if(!d || h.kosmaz) return '';
   const v = x => x != null && x !== '' && x !== '-';
@@ -289,8 +335,8 @@ function infoPanel(h){
   const tk = takiChips(d);
   const s6 = (h.son6 && h.son6.length) ? `<button class="hlab hlg" data-t="Son 6 yarıştaki bitiş sırası. Altın, gümüş ve bronz ilk üç. Kırmızımsı kutu 6. ve daha geri. Üstteki harf pist türü: Ç çim, K kum, S sentetik." onclick="event.stopPropagation();takiTip(this)">SON 6</button>${son6Html(h.son6)}` : '';
   const top = (s6 || tk) ? `<div class="hrow">${s6}${tk}</div>` : '';
-  if(!top && !stats && !best && !lines) return '';
-  const inner = `${stats ? `<div class="hst">${stats}</div>` : ''}${best}${lines ? `<div class="hdet" data-k="${esc(detKey(h))}" onclick="event.stopPropagation()"><button type="button" class="hd-s" aria-expanded="false" onclick="detTg(this)"><span>Orijin, sahip, antrenör</span></button><div class="anim"><div class="anim-in"><div class="hls">${lines}</div></div></div></div>` : ''}`;
+  if(!top && !stats && !best && !lines && !(d && d.atId)) return '';
+  const inner = `${stats ? `<div class="hst">${stats}</div>` : ''}${best}${galipBlock(d)}${lines ? `<div class="hdet" data-k="${esc(detKey(h))}" onclick="event.stopPropagation()"><button type="button" class="hd-s" aria-expanded="false" onclick="detTg(this)"><span>Orijin, sahip, antrenör</span></button><div class="anim"><div class="anim-in"><div class="hls">${lines}</div></div></div></div>` : ''}`;
   if(!inner.trim()) return top ? `<div class="hinfo">${top}</div>` : '';
   // Kapalıyken tek satır özet: yaş · sıklet · HP · son koşu. "Detay" ile tüm bilgiler açılır
   const prev = [v(d.yas) ? esc(d.yas) : '', sik ? esc(sik) + ' kg' : '', v(d.hp) ? '<b class="hp">HP ' + esc(d.hp) + '</b>' : '', kgsTxt ? `<b class="${kgsCls}">${esc(kgsTxt)}</b>` : ''].filter(Boolean).join(' · ');
@@ -344,12 +390,12 @@ function patchOranlar(){
 }
 function applyOpen(root){
   root.querySelectorAll('.hmore[data-k],.hdet[data-k]').forEach(b => {
-    if((b.classList.contains('hmore') ? _moreOpen : _detOpen).has(b.dataset.k)){
-      b.classList.add('open'); const s = b.firstElementChild; if(s) s.setAttribute('aria-expanded', 'true');
-    }
+    const kapali = (b.classList.contains('hmore') ? _moreClosed : _detClosed).has(b.dataset.k);
+    b.classList.toggle('open', !kapali);
+    const s = b.firstElementChild; if(s) s.setAttribute('aria-expanded', String(!kapali));
   });
 }
-const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list') applyOpen(el); } };
+const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list'){ applyOpen(el); galipYukle(el); } } };
 function renderBulten(){
   const y = window.scrollY;
   _renderBulten();

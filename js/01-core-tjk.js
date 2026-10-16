@@ -814,7 +814,7 @@ async function sehirProgramiGetir(sehirId, sehirAdi, tarihIso) {
   }
   return kosular.filter(k => k.atlar && k.atlar.length).map(k => ({
     no: k.no, saat: k.saat, mesafe: k.mesafe || null, pist: k.pist || null, sinif: String(k.sinifMetni || '').slice(0, 320), bilgi: k.bilgiTam || '', baslar: ayakBas[+k.no] || [], oyun: oyunKos[+k.no] || null,
-    atlar: k.atlar.map(a => ({ kosmaz: !!a.kosmaz, no: a.no, isim: a.isim, jokey: a.jokey || '', agf: a.agfYuzde, siklet: a.siklet, yas: a.yas, gny: a.gny, son6: a.son6 || [], ap: !!a.jokeyAp, fazla: a.fazla || null, orijin: a.orijin || null, sahip: a.sahip || null, antrenor: a.antrenor || null, s20: a.s20 || null, st: a.st || null, hp: a.hp || null, kgs: a.kgs || null, eid: a.enIyiDereceHam || null, taki: a.taki || null, takiAciklama: a.takiAciklama || null, takiDetay: a.takiDetay || [], takiHam: a.takiHam || '' }))
+    atlar: k.atlar.map(a => ({ atId: a.atId || null, kosmaz: !!a.kosmaz, no: a.no, isim: a.isim, jokey: a.jokey || '', agf: a.agfYuzde, siklet: a.siklet, yas: a.yas, gny: a.gny, son6: a.son6 || [], ap: !!a.jokeyAp, fazla: a.fazla || null, orijin: a.orijin || null, sahip: a.sahip || null, antrenor: a.antrenor || null, s20: a.s20 || null, st: a.st || null, hp: a.hp || null, kgs: a.kgs || null, eid: a.enIyiDereceHam || null, taki: a.taki || null, takiAciklama: a.takiAciklama || null, takiDetay: a.takiDetay || [], takiHam: a.takiHam || '' }))
   }));
 }
 
@@ -1151,7 +1151,37 @@ async function oranlariGetir(sehirAdi, kosular, tarihIso, ttl = 15000) {
   return {};
 }
 
-return { bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
+// ---- AT PROFİLİNDEN SON GALİBİYET ----
+// TJK at profil sayfasındaki yarış geçmişi tablosunda sıra (S) sütunu 1 olan en yeni satırı bulur.
+// Dönüş: {t:'12.07.2026', d:'1.25.62', y:'İzmir · 1400 Kum'} | {n:1} (hiç galibiyet yok) | null (sayfa/tablo okunamadı)
+async function atSonGalip(atId) {
+  const url = `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtKosuBilgileri?1=1&QueryParameter_AtId=${encodeURIComponent(atId)}`;
+  const html = await (await fetchWithTimeout(url, 20000, 1)).text();
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+  const norm = s => String(s || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+  for (const tb of dom.querySelectorAll('table')) {
+    const rows = Array.from(tb.querySelectorAll('tr'));
+    const hi = rows.findIndex(tr => { const t = norm(tr.textContent); return /Tarih/i.test(t) && /Derece/i.test(t); });
+    if (hi < 0) continue;
+    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent).toLowerCase());
+    const iT = heads.findIndex(h => h.startsWith('tarih'));
+    const iS = heads.findIndex(h => h === 's' || /^s[ıi]ra/.test(h));
+    const iD = heads.findIndex(h => h.startsWith('derece'));
+    const iH = heads.findIndex(h => /hip|şehir|sehir/.test(h));
+    const iM = heads.findIndex(h => /msf|mesafe/.test(h));
+    if (iT < 0 || iS < 0) continue;
+    for (let i = hi + 1; i < rows.length; i++) {
+      const td = rows[i].querySelectorAll('td'); if (td.length <= iS) continue;
+      if (!/^1\b/.test(norm(td[iS].textContent))) continue;
+      const g = idx => idx >= 0 && td[idx] ? norm(td[idx].textContent) : '';
+      return { t: g(iT), d: g(iD), y: [g(iH), g(iM)].filter(Boolean).join(' · ') };
+    }
+    return { n: 1 };
+  }
+  return null;
+}
+
+return { atSonGalip, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();
 
 
