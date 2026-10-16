@@ -348,7 +348,7 @@ else if(AUTH_API){
 (function(){
   const sp = document.getElementById('splash'); if(!sp) return;
   const fill = document.getElementById('sp-fill'), pct = document.getElementById('sp-pct');
-  const MIN = 1500;                       // en az bu kadar ms dolsun
+  const MIN = 700;                        // en az bu kadar ms dolsun
   const t0 = Date.now();
   let p = 0, ready = false, done = false;
   document.documentElement.classList.add('sp-lock');   // açılışta sayfa kaymasın/zıplamasın
@@ -361,11 +361,11 @@ else if(AUTH_API){
   const iv = setInterval(() => {
     const t = Date.now() - t0;
     if(ready && (!FB_ON || window.__gsReady) && window.__banReady !== false && t >= MIN){ p += Math.max(1.2, (100 - p) * .22); }
-    else { p = Math.max(p, 86 * (1 - Math.exp(-t / 700))); }
+    else { p = Math.max(p, 86 * (1 - Math.exp(-t / 300))); }
     if(p > 100) p = 100;
     if(fill) fill.style.width = p.toFixed(1) + '%';
     if(pct) pct.textContent = '%' + Math.floor(p);
-    if(p >= 100) setTimeout(hide, 250);
+    if(p >= 100) setTimeout(hide, 120);
   }, 40);
   const mark = () => { ready = true; };
   if(document.readyState === 'complete') mark(); else window.addEventListener('load', mark);
