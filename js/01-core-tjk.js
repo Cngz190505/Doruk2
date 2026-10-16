@@ -1151,10 +1151,40 @@ async function oranlariGetir(sehirAdi, kosular, tarihIso, ttl = 15000) {
   return {};
 }
 
+// ---- AT PROFİLİNDEN SON GALİBİYET ----
+// Dönüş: {t:'12.07.2026', d:'1.25.62', y:'İzmir · 1400 Kum'} | {n:1} (hiç galibiyet yok) | null
+async function atSonGalibiyet(atId) {
+  const url = `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtKosuBilgileri?1=1&QueryParameter_AtId=${encodeURIComponent(atId)}`;
+  const html = await (await fetchWithTimeout(url, 20000, 1)).text();
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+  const norm = s => String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const tb of dom.querySelectorAll('table')) {
+    const rows = Array.from(tb.querySelectorAll('tr'));
+    const hi = rows.findIndex(tr => { const t = norm(tr.textContent); return /Tarih/i.test(t) && /Derece/i.test(t); });
+    if (hi < 0) continue;
+    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent).toLowerCase());
+    const iT = heads.findIndex(h => h.startsWith('tarih'));
+    const iS = heads.findIndex(h => h === 's' || /^s[ıi]ra/.test(h));
+    const iD = heads.findIndex(h => h.startsWith('derece'));
+    const iH = heads.findIndex(h => /hip|şehir|sehir/.test(h));
+    const iM = heads.findIndex(h => /msf|mesafe/.test(h));
+    const iP = heads.findIndex((h, i) => i !== iM && /pist|zemin/.test(h));
+    if (iT < 0 || iS < 0) continue;
+    for (let i = hi + 1; i < rows.length; i++) {
+      const td = rows[i].querySelectorAll('td'); if (td.length <= iS) continue;
+      if (!/^1\b/.test(norm(td[iS].textContent))) continue;
+      const g = idx => idx >= 0 && td[idx] ? norm(td[idx].textContent) : '';
+      const pist = (g(iP) || (iM >= 0 && td[iM] ? (td[iM].querySelector('[title],img[alt]') || {}).title || '' : '')).replace(/^K$/i, 'Kum').replace(/^[ÇC]$/i, 'Çim').replace(/^S$/i, 'Sentetik');
+      return { t: g(iT), d: g(iD), y: [g(iH), g(iM), pist].filter(Boolean).join(' · ') };
+    }
+    return { n: 1 };
+  }
+  return null;
+}
 // ---- ATIN SON GALOBU (İdman İstatistikleri sayfası) ----
 // Tablodaki en yeni tarihli idman satırını bulur; sütun başlıklarına göre okur (sıra/sütun sayısı değişse de çalışsın diye).
 // Dönüş: {t:'12.10.2026', d:'800 m 52.4', y:'İzmir · Kum'} | {n:1} (idman kaydı yok) | null (sayfa/tablo okunamadı)
-async function atSonGalip(atId) {
+async function atSonGalop(atId) {
   const url = `https://www.tjk.org/TR/YarisSever/Query/Page/IdmanIstatistikleri?QueryParameter_AtId=${encodeURIComponent(atId)}`;
   const html = await (await fetchWithTimeout(url, 20000, 1)).text();
   const dom = new DOMParser().parseFromString(html, 'text/html');
@@ -1184,9 +1214,9 @@ async function atSonGalip(atId) {
     });
     return { t: norm(best[iT].textContent), d: det.join(' · '), y: yer.join(' · ') };
   }
-  return null;
+  throw new Error('tabloda Tarih sütunu yok (' + html.length + ' bayt)');
 }
-return { atSonGalip, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
+return { atSonGalibiyet, atSonGalop, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();
 
 

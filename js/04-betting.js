@@ -254,50 +254,58 @@ function takiChips(d){
     return `<button class="tkc" data-t="${esc(ac)}" onclick="event.stopPropagation();takiTip(this)"><b>${esc(x.k)}</b></button>`;
   }).join('')}</div>`;
 }
-// ---- Son galop (idman sayfasından, cihazda 12 saat saklanır) ----
+// ---- Son galibiyet + son galop (at sayfalarından, cihazda 12 saat saklanır) ----
 const GALIP_TTL = 12 * 3600 * 1000;
-let GALIP = {};
-try{ GALIP = JSON.parse(localStorage.getItem('gs_galop_v2') || '{}') || {}; }catch(e){ GALIP = {}; }
-const _galipFail = {}, _galipBusy = {};
-const galipGet = id => { const g = GALIP[id]; return g && Date.now() - g.ts < GALIP_TTL ? g : null; };
-function galipSave(){ try{ localStorage.setItem('gs_galop_v2', JSON.stringify(GALIP)); }catch(e){} }
+const GL = {
+  gal: { key: 'gs_galip_v2', label: 'Son galibiyet', none: 'Kayıtlı galibiyeti yok', fn: 'atSonGalibiyet', cls: 'hgal' },
+  gop: { key: 'gs_galop_v2', label: 'Son galop', none: 'İdman kaydı yok', fn: 'atSonGalop', cls: 'hgal hgop' }
+};
+Object.keys(GL).forEach(k => {
+  const o = GL[k]; o.c = {}; o.fail = {}; o.busy = {}; o.err = {}; o.q = []; o.run = 0;
+  try{ o.c = JSON.parse(localStorage.getItem(o.key) || '{}') || {}; }catch(e){ o.c = {}; }
+});
+const galipGet = (k, id) => { const g = GL[k].c[id]; return g && Date.now() - g.ts < GALIP_TTL ? g : null; };
+function galipSave(k){ try{ localStorage.setItem(GL[k].key, JSON.stringify(GL[k].c)); }catch(e){} }
 function galipGun(t){
   const m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t || ''); if(!m) return '';
   const n = Math.floor((new Date().setHours(0,0,0,0) - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
   if(!(n >= 0)) return '';
   return n === 0 ? 'Bugün' : n === 1 ? 'Dün' : n < 60 ? n + ' gün önce' : n < 730 ? Math.round(n / 30) + ' ay önce' : Math.floor(n / 365) + ' yıl önce';
 }
-function galipInner(id){
-  const g = galipGet(id);
-  if(!g) return _galipFail[id] && Date.now() - _galipFail[id] < 600000
-    ? '<div><small>Son galop</small><b class="gm">Alınamadı</b></div>'
-    : '<div><small>Son galop</small><b class="gm">Aranıyor…</b></div>';
-  if(g.n) return '<div><small>Son galop</small><b class="gm">İdman kaydı yok</b></div>';
+function galipInner(k, id){
+  const o = GL[k], g = galipGet(k, id);
+  if(!g) return o.fail[id] && Date.now() - o.fail[id] < 600000
+    ? `<div><small>${o.label}</small><b class="gm">Alınamadı</b></div>${o.err[id] ? `<span>${esc(o.err[id])}</span>` : ''}`
+    : `<div><small>${o.label}</small><b class="gm">Aranıyor…</b></div>`;
+  if(g.n) return `<div><small>${o.label}</small><b class="gm">${o.none}</b></div>`;
   const gun = galipGun(g.t);
-  return `<div><small>Son galop${gun ? ' · ' + esc(gun) : ''}</small><b>${esc(g.t)}${g.d ? ' · ' + esc(g.d) : ''}</b></div>${g.y ? `<span>${esc(g.y)}</span>` : ''}`;
+  return `<div><small>${o.label}${gun ? ' · ' + esc(gun) : ''}</small><b>${esc(g.t)}${g.d ? ' · ' + esc(g.d) : ''}</b></div>${g.y ? `<span>${esc(g.y)}</span>` : ''}`;
 }
-const galipBlock = d => d && d.atId ? `<div class="hgal" data-id="${esc(d.atId)}">${galipInner(d.atId)}</div>` : '';
-// Ekrandaki koşunun atları için eksik olanları sırayla (3 paralel) çeker, geldikçe kartı yerinde günceller
-let _galipQ = [], _galipRun = 0;
+const galipBlock = d => d && d.atId ? Object.keys(GL).map(k => `<div class="${GL[k].cls}" data-k="${k}" data-id="${esc(d.atId)}">${galipInner(k, d.atId)}</div>`).join('') : '';
+const galipRefresh = (k, id) => document.querySelectorAll('.hgal[data-k="' + k + '"][data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(k, id); });
+// Ekrandaki koşunun atları için eksik olanları sırayla (türüne göre 3 paralel) çeker, geldikçe kartı yerinde günceller
 function galipYukle(root){
-  root.querySelectorAll('.hgal[data-id]').forEach(el => {
-    const id = el.dataset.id;
-    if(galipGet(id) || _galipBusy[id]) return;
-    if(_galipFail[id] && Date.now() - _galipFail[id] < 600000) return;
-    _galipBusy[id] = 1; _galipQ.push(id);
-  });
-  while(_galipRun < 3 && _galipQ.length){
-    const id = _galipQ.shift(); _galipRun++;
-    TJK.atSonGalip(id).then(r => {
-      if(r){ GALIP[id] = Object.assign({ts: Date.now()}, r); galipSave(); delete _galipFail[id]; }
-      else _galipFail[id] = Date.now();
-    }).catch(() => { _galipFail[id] = Date.now(); }).finally(() => {
-      _galipRun--; delete _galipBusy[id];
-      document.querySelectorAll('.hgal[data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(id); });
-      galipYukle(document);
+  Object.keys(GL).forEach(k => {
+    const o = GL[k];
+    root.querySelectorAll('.hgal[data-k="' + k + '"][data-id]').forEach(el => {
+      const id = el.dataset.id;
+      if(galipGet(k, id) || o.busy[id]) return;
+      if(o.fail[id] && Date.now() - o.fail[id] < 600000) return;
+      o.busy[id] = 1; o.q.push(id);
     });
-    document.querySelectorAll('.hgal[data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(id); });
-  }
+    while(o.run < 3 && o.q.length){
+      const id = o.q.shift(); o.run++;
+      TJK[o.fn](id).then(r => {
+        if(r){ o.c[id] = Object.assign({ts: Date.now()}, r); galipSave(k); delete o.fail[id]; }
+        else o.fail[id] = Date.now();
+      }).catch(e => { o.fail[id] = Date.now(); o.err[id] = String((e && e.message) || e).slice(0, 80); }).finally(() => {
+        o.run--; delete o.busy[id];
+        galipRefresh(k, id);
+        galipYukle(document);
+      });
+      galipRefresh(k, id);
+    }
+  });
 }
 // Detay panelleri varsayılan AÇIK; kullanıcının kapattıkları burada tutulur
 const _detClosed = new Set();
