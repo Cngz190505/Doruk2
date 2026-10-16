@@ -16,6 +16,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet"></noscript>
+<link rel="preload" as="script" href="js/01-core-tjk.js">
+<link rel="preload" as="script" href="js/02-notifs.js">
+<link rel="preload" as="script" href="js/03-feed.js">
+<link rel="preload" as="script" href="js/04-betting.js">
+<link rel="preload" as="script" href="js/05-tabs.js">
+<link rel="preload" as="script" href="js/06-account.js">
+<link rel="preload" as="script" href="js/07-firebase.js">
+<link rel="preload" as="script" href="js/08-admin.js">
+<link rel="preload" as="script" href="js/09-chat.js">
+<link rel="preload" as="script" href="js/10-install-guide.js">
 <link rel="stylesheet" href="css/style.css">
 <style id="gs-profile-tweak">
 /* Profil: isim + @kullanıcı adı biraz sağa, @ etiketi daha zarif */
@@ -477,5 +487,6 @@
 <script src="js/08-admin.js"></script>
 <script src="js/09-chat.js"></script>
 <script src="js/10-install-guide.js"></script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
 </body>
 </html>
