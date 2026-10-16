@@ -519,7 +519,15 @@ function feedDayListen(){
   FB.dayUn.push(FB.db.collection('posts').where('coupon.iso', '==', iso).limit(200).onSnapshot(sn => { FB.dayA = grab(sn); mix(); }, e => showToast(fbErr(e))));
   FB.dayUn.push(FB.db.collection('posts').where('ts', '>=', a).where('ts', '<', b).limit(200).onSnapshot(sn => { FB.dayB = grab(sn); mix(); }, e => showToast(fbErr(e))));
 }
+// Peş peşe gelen yenilemeleri (ör. iki snapshot arka arkaya) tek çizimde topla; ilk çağrı hemen çalışır
+var _rfT = 0, _rfP = 0;
 function renderFeed(){
+  const wait = 60 - (performance.now() - _rfT);
+  if(wait > 0){ if(!_rfP){ _rfP = 1; setTimeout(() => { _rfP = 0; renderFeedNow(); }, wait); } return; }
+  renderFeedNow();
+}
+function renderFeedNow(){
+  _rfT = performance.now();
   renderMeCard();
   paintFeedDate();
   $('cmp-av').innerHTML = av(ME);
@@ -551,7 +559,9 @@ function renderFeed(){
   const cpts = p => { try{ return p.coupon ? couponPts(p.coupon) || 0 : 0; }catch(e){ return 0; } };
   l = l.slice().sort((a, b) => rk(b) - rk(a) || hits(b) - hits(a) || cpts(b) - cpts(a) || eng(b) - eng(a) || (b.ts || 0) - (a.ts || 0));
   
-  $('posts-container').innerHTML = l.length ? l.map(postHtml).join('') : `<div class="empty">${filter==='follow' ? 'Takip ettiğin kimsenin paylaşımı yok. Yukarıdan tahmincileri takip edebilirsin.' : (filter==='all' ? (fiso === TJK.bugunIso() ? 'Henüz paylaşım yok. İlk kuponunu sen paylaş!' : 'Bu tarih için paylaşım yok.') : filter==='tracked' ? 'Henüz takip ettiğin kupon yok. Başkasının kuponunda "Kuponu takip et" butonuna basarak buraya ekleyebilirsin.' : 'Bu filtrede henüz paylaşım yok.')}</div>`;
+  const feedHtml = l.length ? l.map(postHtml).join('') : `<div class="empty">${filter==='follow' ? 'Takip ettiğin kimsenin paylaşımı yok. Yukarıdan tahmincileri takip edebilirsin.' : (filter==='all' ? (fiso === TJK.bugunIso() ? 'Henüz paylaşım yok. İlk kuponunu sen paylaş!' : 'Bu tarih için paylaşım yok.') : filter==='tracked' ? 'Henüz takip ettiğin kupon yok. Başkasının kuponunda "Kuponu takip et" butonuna basarak buraya ekleyebilirsin.' : 'Bu filtrede henüz paylaşım yok.')}</div>`;
+  // Resimler görününce yüklensin (kaydırdıkça), çizimi bloklamasın
+  $('posts-container').innerHTML = feedHtml.replace(/<img(?![^>]*\bloading=)/g, '<img loading="lazy" decoding="async"');
 }
 
 const filterFeed = f => { filter = f; renderFeed(); };
