@@ -899,8 +899,9 @@ function openNextRace(){
     const el = $('horses-list'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
   }, 80);
 }
-setInterval(paintLive, 1000);
-document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(() => { pollSonuc(); odemeSerisi(); }, 500); });
+// Sekme/uygulama arka plandayken geri sayımı çizme (pil ve işlemci tasarrufu); geri gelince hemen güncelle
+setInterval(() => { if(!document.hidden) paintLive(); }, 1000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden){ paintLive(); setTimeout(() => { pollSonuc(); odemeSerisi(); }, 500); } });
 loadBulten();
 paintLive();
 
