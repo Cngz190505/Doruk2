@@ -128,6 +128,8 @@ const ME = 'Mustafa E.';
 // Worker TJK'nın HTML sayfasını döndürür, aşağıdaki ayrıştırıcılar koşu ve atlara çevirir.
 const TJK = (() => {
   const BACKEND = 'https://tiny-sunset-7f18.bilyoncu001.workers.dev';
+  // Galop için ayrı worker: yeni worker'ın adresini buraya yaz (boş bırakılırsa eski yöntem kullanılır)
+  const GALOP_BACKEND = 'https://galop.bilyoncu001.workers.dev';
   const bekle = ms => new Promise(r => setTimeout(r, ms));
 
   async function fetchWithTimeout(url, ms = 12000, retryCount = 2) {
@@ -1232,7 +1234,20 @@ async function galopOku(url) {
   const det = mesafeler.map(([m, j]) => { const v = g(j); return v && v !== '-' ? m + 'm ' + v : ''; }).filter(Boolean).slice(0, 4);
   return { t: g(iT), d: det.join(' · '), y: [g(iH), pist, g(iJ)].filter(Boolean).join(' · ') };
 }
-return { atSonGalibiyet, atSonGalop, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
+// Worker'dan birden çok atın galopunu tek istekte alır: { id: {t,d,y} | {n:1} | {e:'hata'} }
+async function atGaloplarToplu(ids) {
+  if (!/^https:/.test(GALOP_BACKEND)) throw new Error('Galop worker adresi yok');
+  const url = GALOP_BACKEND.replace(/\/$/, '') + '?galop=' + ids.map(encodeURIComponent).join(',');
+  const ctrl = new AbortController(), zt = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const res = await fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors', credentials: 'omit', signal: ctrl.signal });
+    if (!res.ok) throw new Error('Worker HTTP ' + res.status);
+    const j = await res.json();
+    if (!j || typeof j !== 'object' || j.error) throw new Error((j && j.error) || 'Worker galop yok');
+    return j;
+  } finally { clearTimeout(zt); }
+}
+return { atSonGalibiyet, atSonGalop, atGaloplarToplu, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();
 
 

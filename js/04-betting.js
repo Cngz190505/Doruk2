@@ -287,6 +287,7 @@ const galipRefresh = (k, id) => document.querySelectorAll('.hgal[data-k="' + k +
 function galipPompa(k){
   const o = GL[k];
   if(document.hidden) return; // sekme arka plandaysa çekme, dönünce devam eder
+  if(k === 'gop' && TJK.atGaloplarToplu && !(o.workerYok && Date.now() - o.workerYok < 600000)){ return galopTopluPompa(); }
   while(o.run < 3 && o.q.length){
     const id = o.q.shift(); o.run++;
     TJK[o.fn](id).then(r => {
@@ -298,6 +299,29 @@ function galipPompa(k){
       setTimeout(() => galipPompa(k), 250); // ayrıştırma işleri üst üste binmesin, ekran akıcı kalsın
     });
     galipRefresh(k, id);
+  }
+}
+// Galop: worker'a 6'şar atlık toplu istek (telefon sayfa indirip ayrıştırmaz). Worker yoksa 10 dk eski yönteme düşer.
+function galopTopluPompa(){
+  const o = GL.gop;
+  while(o.run < 2 && o.q.length){
+    const ids = o.q.splice(0, 6); o.run++;
+    ids.forEach(id => galipRefresh('gop', id));
+    TJK.atGaloplarToplu(ids).then(m => {
+      ids.forEach(id => {
+        const r = m[id];
+        if(r && (r.t || r.n)){ o.c[id] = Object.assign({ts: Date.now()}, r); delete o.fail[id]; }
+        else { o.fail[id] = Date.now(); o.err[id] = String((r && r.e) || 'Alınamadı').slice(0, 260); }
+      });
+      galipSave('gop');
+    }).catch(e => {
+      o.workerYok = Date.now(); // worker güncel değil: eski yönteme dön
+      ids.forEach(id => { if(!o.q.includes(id)) o.q.unshift(id); });
+    }).finally(() => {
+      o.run--;
+      ids.forEach(id => { if(!o.q.includes(id)){ delete o.busy[id]; galipRefresh('gop', id); } });
+      setTimeout(() => galipPompa('gop'), 100);
+    });
   }
 }
 // Ekrandaki koşunun atları için eksik olanları kuyruğun BAŞINA koyar (önce görünenler gelsin)
