@@ -1200,34 +1200,37 @@ async function atSonGalop(atId) {
 async function galopOku(url) {
   const html = await (await fetchWithTimeout(url, 20000, 1)).text();
   const dom = new DOMParser().parseFromString(html, 'text/html');
-  const norm = s => String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-  const gorulen = [];
+  const norm = s => String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr');
   const ts = t => { const m = /(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/.exec(t); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; };
-  for (const tb of dom.querySelectorAll('table')) {
-    const rows = Array.from(tb.querySelectorAll('tr'));
-    const hi = rows.findIndex(tr => /tarih/i.test(norm(tr.textContent)) && tr.querySelector('th,td'));
-    if (hi < 0) continue;
-    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent));
-    const iT = heads.findIndex(h => /tarih/i.test(h));
-    if (iT < 0) { gorulen.push(heads.join('|').slice(0, 70)); continue; }
-    let best = null, bt = 0;
-    for (let i = hi + 1; i < rows.length; i++) {
-      const td = Array.from(rows[i].querySelectorAll('td')); if (td.length <= iT) continue;
-      const t = ts(norm(td[iT].textContent)); if (t > bt) { bt = t; best = td; }
+  const tablolar = Array.from(dom.querySelectorAll('table'));
+  let rs = null, hi = -1;
+  // Dış yerleşim tablolarını atla, en içteki veri tablosunu bul (başlık: At Adı / İ. Tarihi / Pist / İ. Türü)
+  for (const t of tablolar) {
+    if (t.querySelector('table')) continue;
+    const tr = Array.from(t.querySelectorAll('tr'));
+    for (let i = 0; i < Math.min(tr.length, 3); i++) {
+      const b = norm(tr[i].textContent);
+      if (b.includes('at adı') && b.includes('i. tarihi') && b.includes('pist') && b.includes('i. türü')) { rs = tr; hi = i; break; }
     }
-    if (!best) return { n: 1 };
-    const yerRe = /hip|şehir|sehir|pist|yer|zemin/i;
-    const yer = [], det = [];
-    best.forEach((c, i) => {
-      if (i === iT) return;
-      const v = norm(c.textContent); if (!v || v === '-') return;
-      const h = heads[i] || '';
-      if (yerRe.test(h)) yer.push(v);
-      else if (det.length < 4) det.push(/^\d/.test(h) || !h ? v : (h + ' ' + v));
-    });
-    return { t: norm(best[iT].textContent), d: det.join(' · '), y: yer.join(' · ') };
+    if (rs) break;
   }
-  throw new Error('Tarih sütunu yok, ' + dom.querySelectorAll('table').length + ' tablo, ' + html.length + ' bayt' + (gorulen.length ? ': ' + gorulen[0] : ''));
+  if (!rs) throw new Error('İdman tablosu yok, ' + tablolar.length + ' tablo, ' + html.length + ' bayt');
+  const h = Array.from(rs[hi].querySelectorAll('th,td')).map(c => norm(c.textContent));
+  const ix = a => h.findIndex(x => x.includes(a));
+  const iT = ix('i. tarihi'), iP = ix('pist'), iK = ix('i. türü'), iJ = ix('i. jokeyi'), iH = ix('i. hip');
+  const mesafeler = [1400, 1200, 1000, 800, 600, 400, 200].map(m => [m, h.findIndex(x => x.replace(/[^\dm]/g, '') === m + 'm')]);
+  let best = null, bt = 0;
+  for (let i = hi + 1; i < rs.length; i++) {
+    const td = Array.from(rs[i].querySelectorAll('td')); if (td.length < 5 || td.length <= iT) continue;
+    if (iK >= 0 && td[iK] && !/galop|sprint/i.test(norm(td[iK].textContent))) continue; // sadece galop/sprint
+    const t = ts(norm(td[iT].textContent)); if (t > bt) { bt = t; best = td; }
+  }
+  if (!best) return { n: 1 };
+  const g = j => j >= 0 && best[j] ? best[j].textContent.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  const pistH = g(iP).charAt(0).toUpperCase();
+  const pist = pistH === 'Ç' ? 'Çim' : pistH === 'K' ? 'Kum' : pistH === 'S' ? 'Sentetik' : '';
+  const det = mesafeler.map(([m, j]) => { const v = g(j); return v && v !== '-' ? m + 'm ' + v : ''; }).filter(Boolean).slice(0, 4);
+  return { t: g(iT), d: det.join(' · '), y: [g(iH), pist, g(iJ)].filter(Boolean).join(' · ') };
 }
 return { atSonGalibiyet, atSonGalop, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();
