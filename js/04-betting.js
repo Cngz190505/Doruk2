@@ -283,30 +283,60 @@ function galipInner(k, id){
 }
 const galipBlock = d => d && d.atId ? Object.keys(GL).map(k => `<div class="${GL[k].cls}" data-k="${k}" data-id="${esc(d.atId)}">${galipInner(k, d.atId)}</div>`).join('') : '';
 const galipRefresh = (k, id) => document.querySelectorAll('.hgal[data-k="' + k + '"][data-id="' + id + '"]').forEach(el => { el.innerHTML = galipInner(k, id); });
-// Ekrandaki koşunun atları için eksik olanları sırayla (türüne göre 3 paralel) çeker, geldikçe kartı yerinde günceller
+// Kuyruktaki işleri (türüne göre 3 paralel) çeker, geldikçe kartı yerinde günceller
+function galipPompa(k){
+  const o = GL[k];
+  if(document.hidden) return; // sekme arka plandaysa çekme, dönünce devam eder
+  while(o.run < 3 && o.q.length){
+    const id = o.q.shift(); o.run++;
+    TJK[o.fn](id).then(r => {
+      if(r){ o.c[id] = Object.assign({ts: Date.now()}, r); galipSave(k); delete o.fail[id]; }
+      else o.fail[id] = Date.now();
+    }).catch(e => { o.fail[id] = Date.now(); o.err[id] = String((e && e.message) || e).slice(0, 260); }).finally(() => {
+      o.run--; delete o.busy[id];
+      galipRefresh(k, id);
+      setTimeout(() => galipPompa(k), 250); // ayrıştırma işleri üst üste binmesin, ekran akıcı kalsın
+    });
+    galipRefresh(k, id);
+  }
+}
+// Ekrandaki koşunun atları için eksik olanları kuyruğun BAŞINA koyar (önce görünenler gelsin)
 function galipYukle(root){
   Object.keys(GL).forEach(k => {
-    const o = GL[k];
+    const o = GL[k], gor = [];
     root.querySelectorAll('.hgal[data-k="' + k + '"][data-id]').forEach(el => {
       const id = el.dataset.id;
-      if(galipGet(k, id) || o.busy[id]) return;
+      if(galipGet(k, id)) return;
       if(o.fail[id] && Date.now() - o.fail[id] < 600000) return;
-      o.busy[id] = 1; o.q.push(id);
+      if(o.busy[id]){ const i = o.q.indexOf(id); if(i > 0){ o.q.splice(i, 1); gor.push(id); } return; }
+      o.busy[id] = 1; gor.push(id);
     });
-    while(o.run < 3 && o.q.length){
-      const id = o.q.shift(); o.run++;
-      TJK[o.fn](id).then(r => {
-        if(r){ o.c[id] = Object.assign({ts: Date.now()}, r); galipSave(k); delete o.fail[id]; }
-        else o.fail[id] = Date.now();
-      }).catch(e => { o.fail[id] = Date.now(); o.err[id] = String((e && e.message) || e).slice(0, 260); }).finally(() => {
-        o.run--; delete o.busy[id];
-        galipRefresh(k, id);
-        galipYukle(document);
-      });
-      galipRefresh(k, id);
-    }
+    o.q.unshift(...gor);
+    galipPompa(k);
   });
 }
+// Girişte: seçili şehrin atlarının son galopunu arka planda önceden çeker (önce seçili koşu).
+// Ekran boştayken başlar, veri tasarrufu açıksa ya da sekme gizliyse yapmaz.
+let _gonBekle = false;
+function galopOnYukle(){
+  if(_gonBekle) return; _gonBekle = true;
+  const basla = () => {
+    _gonBekle = false;
+    try{
+      if(document.hidden || (navigator.connection && navigator.connection.saveData)) return;
+      const o = GL.gop;
+      raceList(city).slice().sort((a, b) => (a.no === race ? -1 : b.no === race ? 1 : 0)).forEach(kz => (kz.atlar || []).forEach(a => {
+        const id = a.atId || (a.d && a.d.atId);
+        if(!id || a.kosmaz || galipGet('gop', id) || o.busy[id]) return;
+        if(o.fail[id] && Date.now() - o.fail[id] < 600000) return;
+        o.busy[id] = 1; o.q.push(id);
+      }));
+      galipPompa('gop');
+    }catch(e){}
+  };
+  if(window.requestIdleCallback) requestIdleCallback(basla, {timeout: 3000}); else setTimeout(basla, 800);
+}
+document.addEventListener('visibilitychange', () => { if(!document.hidden) Object.keys(GL).forEach(galipPompa); });
 // Detay panelleri varsayılan AÇIK; kullanıcının kapattıkları burada tutulur
 const _detClosed = new Set();
 const detKey = h => city + '|' + race + '|' + h.no;
@@ -407,6 +437,7 @@ const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el
 function renderBulten(){
   const y = window.scrollY;
   _renderBulten();
+  galopOnYukle();
   if(Math.abs(window.scrollY - y) > 1) window.scrollTo({top: y, behavior: 'instant'});
 }
 function _renderBulten(){
