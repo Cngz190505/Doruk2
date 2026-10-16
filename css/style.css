@@ -2986,3 +2986,6 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
   .sheet-card,
   .cms-card{ max-width:760px !important; }
 }
+
+/* Öne Çıkan Tahminciler: taç üstten, defne yanlardan, kurdele alttan kırpılmasın (overflow-x:auto dikeyde de kırpar) */
+.st-strip{padding:26px 16px 16px;margin:0 -16px}
