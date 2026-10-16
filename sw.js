@@ -1,8 +1,9 @@
 /* GanyanSosyal Service Worker
-   Amaç: GitHub Pages'e yeni dosya yüklenince çerez/önbellek temizlemeye gerek kalmasın.
-   Strateji: sayfa (HTML) ve kendi dosyaları için "önce ağ" (cache:'no-store'),
-   internet yoksa son çalışan kopya. Firebase / Google istekleri ellenmez. */
-const CACHE = 'ganyansosyal-offline-v1';
+   Strateji: önce önbellek (anında açılır), arkada ağdan güncelle.
+   Yeni dosya yüklenince bir sonraki açılışta otomatik gelir.
+   Firebase SDK dosyaları (sürüm numaralı) önbellekten sunulur.
+   Firestore / Auth / diğer API istekleri ellenmez. */
+const CACHE = 'ganyansosyal-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -14,38 +15,41 @@ self.addEventListener('activate', e => {
   })());
 });
 
+const okRes = r => r && (r.ok || r.type === 'opaque');
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;   // Firebase, fontlar vb. dokunma
-  e.respondWith((async () => {
-    try {
-      // Ağ 3 sn'de yanıt vermezse (yavaş bağlantı) açılışı bekletme, son kopyayı göster
-      const net = fetch(req, {cache: 'no-store'});
-      let fresh;
-      if (req.mode === 'navigate') {
-        const slow = new Promise(r => setTimeout(() => r(null), 3000));
-        fresh = await Promise.race([net, slow]);
-        if (!fresh) {
-          const hit = await caches.match(req, {ignoreSearch: true});
-          if (hit) { net.then(r => r && r.ok && caches.open(CACHE).then(c => c.put(req, r.clone()))).catch(() => {}); return hit; }
-          fresh = await net;
-        }
-      } else {
-        fresh = await net;
-      }
-      if (fresh && fresh.ok) {
-        const c = await caches.open(CACHE);
-        c.put(req, fresh.clone());
-      }
-      return fresh;
-    } catch (err) {
-      const hit = await caches.match(req, {ignoreSearch: true});
+
+  // Firebase SDK (sürüm numaralı, değişmez): önbellekten
+  if (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0) {
+    e.respondWith((async () => {
+      const hit = await caches.match(req);
       if (hit) return hit;
+      const res = await fetch(req);
+      if (okRes(res)) { const c = await caches.open(CACHE); c.put(req, res.clone()); }
+      return res;
+    })());
+    return;
+  }
+
+  if (url.origin !== self.location.origin) return;   // diğer dış istekler: dokunma
+
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const hit = await cache.match(req, {ignoreSearch: true});
+    // Arkada güncelle (kullanıcıyı bekletmez)
+    const update = fetch(req, {cache: 'no-store'}).then(res => {
+      if (res && res.ok) cache.put(req, res.clone());
+      return res;
+    });
+    if (hit) { update.catch(() => {}); return hit; }
+    try { return await update; }
+    catch (err) {
       if (req.mode === 'navigate') {
-        const home = await caches.match(self.location.pathname.replace(/sw\.js$/, ''), {ignoreSearch: true})
-                  || await caches.match(self.location.pathname.replace(/sw\.js$/, 'index.html'), {ignoreSearch: true});
+        const home = await cache.match(self.location.pathname.replace(/sw\.js$/, ''), {ignoreSearch: true})
+                  || await cache.match(self.location.pathname.replace(/sw\.js$/, 'index.html'), {ignoreSearch: true});
         if (home) return home;
       }
       throw err;
