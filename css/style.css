@@ -2958,3 +2958,12 @@ html .maint-ov .mt-dot{animation:mtBlink 1.4s ease-out infinite!important}
 /* Bakım açıkken: açılış ekranı araya girmesin, arkadaki uygulama hiç çizilmesin (kasma/pil yükü olmasın) */
 body.maint #splash{display:none!important}
 body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
+
+/* ===== Otomatik genişlik: ekrana göre büyür ===== */
+:root{ --appw:clamp(500px, 62vw, 1000px); }
+
+.app{ max-width:var(--appw) !important; }
+nav{ max-width:var(--appw) !important; }
+.dr{ max-width:calc(var(--appw) - 32px) !important; }
+.sheet-card,
+.cms-card{ max-width:var(--appw) !important; }
