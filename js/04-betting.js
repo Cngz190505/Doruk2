@@ -254,13 +254,13 @@ function takiChips(d){
     return `<button class="tkc" data-t="${esc(ac)}" onclick="event.stopPropagation();takiTip(this)"><b>${esc(x.k)}</b></button>`;
   }).join('')}</div>`;
 }
-// ---- Son galibiyet (at profilinden, cihazda 12 saat saklanır) ----
+// ---- Son galop (idman sayfasından, cihazda 12 saat saklanır) ----
 const GALIP_TTL = 12 * 3600 * 1000;
 let GALIP = {};
-try{ GALIP = JSON.parse(localStorage.getItem('gs_galip_v1') || '{}') || {}; }catch(e){ GALIP = {}; }
+try{ GALIP = JSON.parse(localStorage.getItem('gs_galop_v2') || '{}') || {}; }catch(e){ GALIP = {}; }
 const _galipFail = {}, _galipBusy = {};
 const galipGet = id => { const g = GALIP[id]; return g && Date.now() - g.ts < GALIP_TTL ? g : null; };
-function galipSave(){ try{ localStorage.setItem('gs_galip_v1', JSON.stringify(GALIP)); }catch(e){} }
+function galipSave(){ try{ localStorage.setItem('gs_galop_v2', JSON.stringify(GALIP)); }catch(e){} }
 function galipGun(t){
   const m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t || ''); if(!m) return '';
   const n = Math.floor((new Date().setHours(0,0,0,0) - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
@@ -270,11 +270,11 @@ function galipGun(t){
 function galipInner(id){
   const g = galipGet(id);
   if(!g) return _galipFail[id] && Date.now() - _galipFail[id] < 600000
-    ? '<div><small>Son galibiyet</small><b class="gm">Alınamadı</b></div>'
-    : '<div><small>Son galibiyet</small><b class="gm">Aranıyor…</b></div>';
-  if(g.n) return '<div><small>Son galibiyet</small><b class="gm">Kayıtlı galibiyeti yok</b></div>';
+    ? '<div><small>Son galop</small><b class="gm">Alınamadı</b></div>'
+    : '<div><small>Son galop</small><b class="gm">Aranıyor…</b></div>';
+  if(g.n) return '<div><small>Son galop</small><b class="gm">İdman kaydı yok</b></div>';
   const gun = galipGun(g.t);
-  return `<div><small>Son galibiyet${gun ? ' · ' + esc(gun) : ''}</small><b>${esc(g.t)}${g.d ? ' · ' + esc(g.d) : ''}</b></div>${g.y ? `<span>${esc(g.y)}</span>` : ''}`;
+  return `<div><small>Son galop${gun ? ' · ' + esc(gun) : ''}</small><b>${esc(g.t)}${g.d ? ' · ' + esc(g.d) : ''}</b></div>${g.y ? `<span>${esc(g.y)}</span>` : ''}`;
 }
 const galipBlock = d => d && d.atId ? `<div class="hgal" data-id="${esc(d.atId)}">${galipInner(d.atId)}</div>` : '';
 // Ekrandaki koşunun atları için eksik olanları sırayla (3 paralel) çeker, geldikçe kartı yerinde günceller

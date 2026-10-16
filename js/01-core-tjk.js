@@ -1151,36 +1151,41 @@ async function oranlariGetir(sehirAdi, kosular, tarihIso, ttl = 15000) {
   return {};
 }
 
-// ---- AT PROFİLİNDEN SON GALİBİYET ----
-// TJK at profil sayfasındaki yarış geçmişi tablosunda sıra (S) sütunu 1 olan en yeni satırı bulur.
-// Dönüş: {t:'12.07.2026', d:'1.25.62', y:'İzmir · 1400 Kum'} | {n:1} (hiç galibiyet yok) | null (sayfa/tablo okunamadı)
+// ---- ATIN SON GALOBU (İdman İstatistikleri sayfası) ----
+// Tablodaki en yeni tarihli idman satırını bulur; sütun başlıklarına göre okur (sıra/sütun sayısı değişse de çalışsın diye).
+// Dönüş: {t:'12.10.2026', d:'800 m 52.4', y:'İzmir · Kum'} | {n:1} (idman kaydı yok) | null (sayfa/tablo okunamadı)
 async function atSonGalip(atId) {
-  const url = `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtKosuBilgileri?1=1&QueryParameter_AtId=${encodeURIComponent(atId)}`;
+  const url = `https://www.tjk.org/TR/YarisSever/Query/Page/IdmanIstatistikleri?QueryParameter_AtId=${encodeURIComponent(atId)}`;
   const html = await (await fetchWithTimeout(url, 20000, 1)).text();
   const dom = new DOMParser().parseFromString(html, 'text/html');
-  const norm = s => String(s || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+  const norm = s => String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const ts = t => { const m = /(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/.exec(t); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; };
   for (const tb of dom.querySelectorAll('table')) {
     const rows = Array.from(tb.querySelectorAll('tr'));
-    const hi = rows.findIndex(tr => { const t = norm(tr.textContent); return /Tarih/i.test(t) && /Derece/i.test(t); });
+    const hi = rows.findIndex(tr => /tarih/i.test(norm(tr.textContent)) && tr.querySelector('th,td'));
     if (hi < 0) continue;
-    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent).toLowerCase());
-    const iT = heads.findIndex(h => h.startsWith('tarih'));
-    const iS = heads.findIndex(h => h === 's' || /^s[ıi]ra/.test(h));
-    const iD = heads.findIndex(h => h.startsWith('derece'));
-    const iH = heads.findIndex(h => /hip|şehir|sehir/.test(h));
-    const iM = heads.findIndex(h => /msf|mesafe/.test(h));
-    if (iT < 0 || iS < 0) continue;
+    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent));
+    const iT = heads.findIndex(h => /^tarih/i.test(h));
+    if (iT < 0) continue;
+    let best = null, bt = 0;
     for (let i = hi + 1; i < rows.length; i++) {
-      const td = rows[i].querySelectorAll('td'); if (td.length <= iS) continue;
-      if (!/^1\b/.test(norm(td[iS].textContent))) continue;
-      const g = idx => idx >= 0 && td[idx] ? norm(td[idx].textContent) : '';
-      return { t: g(iT), d: g(iD), y: [g(iH), g(iM)].filter(Boolean).join(' · ') };
+      const td = Array.from(rows[i].querySelectorAll('td')); if (td.length <= iT) continue;
+      const t = ts(norm(td[iT].textContent)); if (t > bt) { bt = t; best = td; }
     }
-    return { n: 1 };
+    if (!best) return { n: 1 };
+    const yerRe = /hip|şehir|sehir|pist|yer|zemin/i;
+    const yer = [], det = [];
+    best.forEach((c, i) => {
+      if (i === iT) return;
+      const v = norm(c.textContent); if (!v || v === '-') return;
+      const h = heads[i] || '';
+      if (yerRe.test(h)) yer.push(v);
+      else if (det.length < 4) det.push(/^\d/.test(h) || !h ? v : (h + ' ' + v));
+    });
+    return { t: norm(best[iT].textContent), d: det.join(' · '), y: yer.join(' · ') };
   }
   return null;
 }
-
 return { atSonGalip, bugunIso, sehirleriGetir, sehirProgramiGetir, sonuclariGetir, oranlariGetir, parseKosular, fetchHtml: async url => (await fetchWithTimeout(url, 20000, 1)).text() };
 })();
 
