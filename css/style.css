@@ -3027,3 +3027,13 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 .hacc .acc-v b.warn{color:#d97706}
 .hacc .acc-v b.bad{color:#dc2626}
 .hacc .acc-v b.nt{color:var(--mu,#5E6B80)}
+
+/* Accurace: açılır detay */
+.hacc details.acc-d{margin-top:2px}
+.hacc summary.acc-h{list-style:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hacc summary.acc-h::-webkit-details-marker{display:none}
+.hacc summary.acc-h>b{font-size:15px;font-weight:800}
+.hacc .acc-s{display:inline-flex;align-items:center;gap:8px}
+.hacc .acc-cv{font-size:14px;color:var(--mu,#5E6B80);transition:transform .2s}
+.hacc details[open] .acc-cv{transform:rotate(180deg)}
+.hacc details.acc-d>.acc-m{margin-top:6px}
