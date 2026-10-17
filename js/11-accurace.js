@@ -5,8 +5,9 @@
 (function(){
   var ACC_TTL = 12 * 3600 * 1000;        // at sonucu cihazda 12 saat
   var BOS_TTL = 6 * 3600 * 1000;         // boş koşu sayfası 6 saat
+  var FAIL_MS = 120000;                  // hata sonrası 2 dk bekle, sonra yeniden dene
   var SON_N = 2;                          // her at için bakılacak son koşu sayısı
-  var KEY = 'gs_acc_v2', RKEY = 'gs_accr_v2_';
+  var KEY = 'gs_acc_v4', RKEY = 'gs_accr_v4_';
   var S = { c: {}, fail: {}, err: {}, busy: {}, q: [], run: 0, fly: {} };
   try { S.c = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e){ S.c = {}; }
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(S.c)); } catch(e){} }
@@ -40,40 +41,44 @@
     return k ? m[k] : null;
   }
 
-  // ---- Accurace HTML -> tablo metni -> koşu verisi (eski uygulamadaki çalışan yöntemle aynı) ----
-  function htmlMetne(html){
+  // ---- Accurace HTML -> koşu verisi (ağaç değiştirilmez, sadece satırlar okunur: hızlı) ----
+  function hucreMetni(n){
+    var t = []; (function gez(x){
+      for(var c = x.firstChild; c; c = c.nextSibling){
+        if(c.nodeType === 3){ var v = c.nodeValue.replace(/\s+/g, ' ').trim(); if(v) t.push(v); } else if(c.nodeType === 1) gez(c);
+      }
+    })(n); return t.join(' ');
+  }
+  function kosuHazirla(html){
     var doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    doc.querySelectorAll('script,style,noscript').forEach(function(n){ n.remove(); });
-    function metin(n){ var t = []; (function gez(x){
-      x.childNodes.forEach(function(c){ if(c.nodeType === 3){ var v = c.nodeValue.replace(/\s+/g, ' ').trim(); if(v) t.push(v); } else if(c.nodeType === 1) gez(c); });
-    })(n); return t.join(' '); }
-    doc.querySelectorAll('tr').forEach(function(tr){
-      var h = Array.prototype.filter.call(tr.children, function(c){ return /^(TD|TH)$/i.test(c.tagName); }).map(metin);
-      if(!h.length) return;
-      tr.replaceWith(doc.createTextNode('\n| ' + h.join(' | ') + ' |\n'));
-    });
-    doc.querySelectorAll('br,p,div,li,h1,h2,h3,h4,h5,h6,span,section').forEach(function(n){ n.insertAdjacentText('afterend', '\n'); });
-    return (doc.body ? doc.body.textContent : '').replace(/\n\s*\n+/g, '\n');
-  }
-  function metinAyristir(metin){
-    var atlar = {}, sayac = 0, sayi = function(x){ var n = Number(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) && String(x).trim() !== '' ? n : null; };
-    String(metin || '').split('\n').filter(function(x){ return /^\|\s*\d+\s+/.test(x); }).forEach(function(satir){
-      var c = satir.split('|').map(function(x){ return x.trim(); }); if(c.length < 12) return;
-      var m = c[1].match(/^(\d+)\s+(.+)$/); if(!m) return;
-      atlar[m[1]] = { no: m[1], isim: m[2], sira: ++sayac, sure: sureCevir(c[2]), sonSure: sureCevir(c[7]), mesafe: sayi(c[10]), delta: (c[11] === '-' ? 0 : sayi(c[11])), fark: sayi(c[12]) };
-    });
-    var hb = String(metin || '').match(/(\d{2}\.\d{2}\.\d{4})\s*\/\s*(\d+)\s*Metre\s*([^\n|]*)/i);
-    return { atlar: atlar, meta: { tarih: hb ? hb[1] : null, mesafe: hb ? +hb[2] : null, pist: hb ? pistGec(hb[3]) : '' } };
-  }
-  // Koşudaki her atın son 100 m sırası (en kısa süre = 1) ile birlikte, saklamaya uygun sade liste
-  function kosuHazirla(metin){
-    var d = metinAyristir(metin), liste = Object.keys(d.atlar).map(function(k){ return d.atlar[k]; });
+    var sayi = function(x){ var n = Number(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) && String(x == null ? '' : x).trim() !== '' ? n : null; };
+    var liste = [], sayac = 0, trs = doc.querySelectorAll('tr');
+    for(var i = 0; i < trs.length; i++){
+      var cells = [], ch = trs[i].children;
+      for(var k = 0; k < ch.length; k++) if(/^(TD|TH)$/i.test(ch[k].tagName)) cells.push(hucreMetni(ch[k]));
+      if(cells.length < 10) continue;
+      var m = cells[0].match(/^(\d+)\s+(.+)$/); if(!m) continue;
+      liste.push({ no: m[1], isim: m[2], sira: ++sayac, sure: sureCevir(cells[1]), mesafe: sayi(cells[9]), delta: (cells[10] === '-' ? 0 : sayi(cells[10])) });
+    }
     if(!liste.length) return null;
+    doc.querySelectorAll('script,style').forEach(function(n){ n.remove(); });
+    var hb = (doc.body ? doc.body.textContent : '').match(/(\d{2}\.\d{2}\.\d{4})\s*\/\s*(\d+)\s*Metre\s*([^\n|]*)/i);
     var s100 = liste.filter(function(x){ return x.sure > 0; }).sort(function(a, b){ return a.sure - b.sure; });
-    return { meta: d.meta, n: liste.length, atlar: liste.map(function(x){
-      return { no: x.no, isim: x.isim, sira: x.sira, sure: x.sure, delta: x.delta, mesafe: x.mesafe, s100sira: s100.indexOf(x) + 1 || null };
-    }) };
+    return { meta: { tarih: hb ? hb[1] : null, mesafe: hb ? +hb[2] : null, pist: hb ? pistGec(hb[3]) : '', s100en: s100.length ? s100[0].sure : null }, n: liste.length,
+      atlar: liste.map(function(x){ return { no: x.no, isim: x.isim, sira: x.sira, sure: x.sure, delta: x.delta, mesafe: x.mesafe, s100sira: s100.indexOf(x) + 1 || null }; }) };
   }
+
+  // ---- ağ: en çok 4 eşzamanlı istek, ayrıştırma ekran boştayken (donma yok) ----
+  var fRun = 0, fQ = [];
+  function drain(){
+    while(fRun < 4 && fQ.length){
+      var it = fQ.shift(); fRun++;
+      Promise.resolve().then(it.fn).then(it.res, it.rej).then(function(){ fRun--; drain(); });
+    }
+  }
+  function limit(fn){ return new Promise(function(res, rej){ fQ.push({ fn: fn, res: res, rej: rej }); drain(); }); }
+  function bosta(){ return new Promise(function(r){ if(window.requestIdleCallback) requestIdleCallback(function(){ r(); }, { timeout: 250 }); else setTimeout(r, 20); }); }
+  var yok404 = function(e){ return /\b404\b/.test(String((e && e.message) || e)); };
 
   // ---- Accurace koşu sayfası (cihaz önbellekli, aynı anda tek istek) ----
   function kosuGetir(iso, kod, no){
@@ -81,23 +86,41 @@
     try { var c = JSON.parse(localStorage.getItem(key) || 'null'); if(c && (!c.bos || Date.now() - c.t < BOS_TTL)) return Promise.resolve(c.bos ? null : c.v); } catch(e){}
     if(S.fly[key]) return S.fly[key];
     var url = 'https://accurace.net/network/' + iso + '/' + kod + '/' + no;
-    return S.fly[key] = TJK.fetchHtml(url).then(function(html){
-      var v = kosuHazirla(htmlMetne(html));
-      try { localStorage.setItem(key, JSON.stringify(v ? { t: Date.now(), v: v } : { t: Date.now(), bos: 1 })); } catch(e){}
-      return v;
+    var yaz = function(v){ try { localStorage.setItem(key, JSON.stringify(v ? { t: Date.now(), v: v } : { t: Date.now(), bos: 1 })); } catch(e){} };
+    return S.fly[key] = limit(function(){ return TJK.fetchHtml(url); }).then(function(html){
+      return bosta().then(function(){ var v = kosuHazirla(html); yaz(v); return v; });
     }).catch(function(e){
-      if(/\b404\b/.test(String((e && e.message) || e))){ try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), bos: 1 })); } catch(_){} return null; }
+      if(yok404(e)){ yaz(null); return null; }
       throw e;
-    }).finally(function(){ delete S.fly[key]; });
+    }).then(function(v){ delete S.fly[key]; return v; }, function(e){ delete S.fly[key]; throw e; });
   }
   async function kosuGetirDene(iso, kod, no){
-    try { return await kosuGetir(iso, kod, no); } catch(e){ await bekle(1500); return await kosuGetir(iso, kod, no); }
+    try { return await kosuGetir(iso, kod, no); } catch(e){ await bekle(1200); return await kosuGetir(iso, kod, no); }
+  }
+  // Bir günün tüm koşuları: 4'erli paralel çekilir, 2 boş koşuda durur. Aynı gün için tek tarama, tüm atlar paylaşır.
+  var GUN = {};
+  function gunTara(iso, kod){
+    var gk = iso + '|' + kod; if(GUN[gk]) return GUN[gk];
+    return GUN[gk] = (async function(){
+      var out = { kosular: {}, hata: false }, no = 1, bos = 0, dur = false;
+      while(no <= 12 && !dur){
+        var grup = []; for(var i = 0; i < 4 && no + i <= 12; i++) grup.push(no + i);
+        var res = await Promise.all(grup.map(function(n){ return kosuGetirDene(iso, kod, n).catch(function(){ return undefined; }); }));
+        for(var j = 0; j < res.length; j++){
+          if(res[j] === undefined){ out.hata = true; continue; }
+          if(!res[j]){ if(++bos >= 2){ dur = true; break; } } else { bos = 0; out.kosular[grup[j]] = res[j]; }
+        }
+        no += 4;
+      }
+      if(out.hata) setTimeout(function(){ delete GUN[gk]; }, 60000);   // ağ hatası olduysa bir dakika sonra yeniden denenebilsin
+      return out;
+    })();
   }
 
   // ---- atın TJK profilinden son koşuları: [{t, sira, hip}] (en yeni başta) ----
   async function atGecmis(atId){
     var url = 'https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtKosuBilgileri?1=1&QueryParameter_AtId=' + encodeURIComponent(atId);
-    var html = await TJK.fetchHtml(url);
+    var html = await limit(function(){ return TJK.fetchHtml(url); });
     var dom = new DOMParser().parseFromString(html, 'text/html');
     var norm = function(s){ return String(s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim(); };
     var tabs = dom.querySelectorAll('table');
@@ -125,28 +148,29 @@
     return [];
   }
 
-  // Bir günün koşularını sırayla tarar, atı bulunca durur (2 boş koşuda da durur)
   async function atiBul(iso, kod, ad){
-    var bos = 0;
-    for(var no = 1; no <= 12; no++){
-      var k = await kosuGetirDene(iso, kod, no);
-      if(!k){ if(++bos >= 2) break; continue; }
-      bos = 0;
-      var m = {}; k.atlar.forEach(function(a){ m[adNorm(a.isim)] = a; });
+    var g = await gunTara(iso, kod), nolar = Object.keys(g.kosular).map(Number).sort(function(a, b){ return a - b; });
+    for(var i = 0; i < nolar.length; i++){
+      var k = g.kosular[nolar[i]], m = {};
+      k.atlar.forEach(function(a){ m[adNorm(a.isim)] = a; });
       var a = adBul(m, ad);
-      if(a) return { k: k, a: a, no: no };
+      if(a) return { k: k, a: a, no: nolar[i], hata: false };
     }
-    return null;
+    return { hata: g.hata };
   }
   // Dönüş: ham sayılar (etiket görüntülenirken hesaplanır) | {n:1} (Accurace'te kayıt yok)
   async function atSonAccurace(atId, isim){
-    var ad = adNorm(isim), rows = await atGecmis(atId);
+    var ad = adNorm(isim), rows;
+    try { rows = await atGecmis(atId); } catch(e){ if(yok404(e)) return { n: 1 }; throw e; }
+    var hata = false;
     for(var i = 0; i < rows.length; i++){
-      var r = rows[i], iso = tarihIso(r.t), kod = sehirKodu(r.hip); if(!iso || !kod) continue;
+      var r = rows[i], iso = tarihIso(r.t), kod = sehirKodu(String(r.hip).split(/\s+/)[0]); if(!iso || !kod) continue;
       var b = await atiBul(iso, kod, ad);
-      if(b) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
-        sira: r.sira || b.a.sira, delta: b.a.delta, s100: b.a.sure, s100sira: b.a.s100sira };
+      if(b.k) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
+        sira: r.sira || b.a.sira, delta: b.a.delta, s100: b.a.sure, s100sira: b.a.s100sira, s100en: b.k.meta.s100en };
+      if(b.hata) hata = true;
     }
+    if(hata) throw new Error('Accurace şu an yanıt vermedi');
     return { n: 1 };
   }
 
@@ -160,23 +184,25 @@
     return { c: 'acc-n', e: '⚪', y: 'Normal koştu' };
   }
   var vir = function(x, d){ return Number(x).toFixed(d == null ? 1 : d).replace('.', ','); };
-  // Satırlar: [renk sınıfı, açıklama]. pos=yeşil, warn=turuncu, bad=kırmızı, nt=nötr
+  // Satır: [renk sınıfı, kalın durum yazısı, açıklama]. pos=yeşil, warn=turuncu, bad=kırmızı, nt=gri
   function yolSatiri(g){
     if(g.delta == null) return null;
-    if(g.delta >= 2) return ['pos', 'Dışarıdan dolaştı · ' + vir(g.delta) + ' m fazla yol koştu'];
-    if(g.delta <= -2) return ['warn', 'Kısa yoldan gitti · ' + vir(-g.delta) + ' m az yol koştu'];
-    return ['nt', 'Yol farkı az · ' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + vir(Math.abs(g.delta)) + ' m'];
+    if(g.delta >= 2) return ['pos', 'Dışarıdan dolaştı', vir(g.delta) + ' m fazla yol koştu, sonucu olduğundan kötü görünüyor'];
+    if(g.delta <= -2) return ['warn', 'Kısa yoldan gitti', vir(-g.delta) + ' m az yol koştu, sonucu olduğundan iyi görünüyor'];
+    return ['nt', 'Yolu sıradandı', 'kazananla yol farkı çok az (' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + vir(Math.abs(g.delta)) + ' m)'];
   }
   function finisSatiri(g){
     if(!g.s100sira || !g.s100) return null;
-    var u1 = Math.ceil(g.n / 3), u2 = Math.ceil(g.n * 2 / 3), sn = vir(g.s100, 2) + ' sn';
-    if(g.s100sira === 1) return ['pos', sn + ' · koşunun en hızlısı'];
-    if(g.s100sira <= u1) return ['pos', sn + ' · ' + g.s100sira + '. en hızlı (' + g.n + ' at içinde)'];
-    if(g.s100sira > u2) return ['bad', sn + ' · yavaşladı, bitirişi zayıf (' + g.s100sira + '. en hızlı)'];
-    return ['nt', sn + ' · ortalama (' + g.s100sira + '. en hızlı)'];
+    var u1 = Math.ceil(g.n / 3), u2 = Math.ceil(g.n * 2 / 3);
+    var fark = g.s100en != null ? g.s100 - g.s100en : null;
+    var d = vir(g.s100, 2) + ' sn' + (fark != null && fark > 0.004 ? ' · koşunun en hızlı atından ' + vir(fark, 2) + ' sn geride' : fark != null ? ' · koşunun en hızlı finişi' : '');
+    if(g.s100sira === 1) return ['pos', 'Finişte koşunun en hızlısıydı', vir(g.s100, 2) + ' sn'];
+    if(g.s100sira <= u1) return ['pos', 'Finişte güçlüydü', d];
+    if(g.s100sira > u2) return ['bad', 'Finişte zayıftı', d];
+    return ['nt', 'Finişi ortalamaydı', d];
   }
-  function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + '. ' : ''; }
-  function finisMetni(g){ var r = finisSatiri(g); return r ? r[1] + '.' : ''; }
+  function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + ' · ' + r[2] + '. ' : ''; }
+  function finisMetni(g){ var r = finisSatiri(g); return r ? r[1] + ' · ' + r[2] + '.' : ''; }
   function gunMetni(t){
     var m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t || ''); if(!m) return '';
     var n = Math.floor((new Date().setHours(0,0,0,0) - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
@@ -189,14 +215,15 @@
   function inner(id){
     var g = get(id), E = 'Son koşu analizi';
     if(!g){
-      if(S.fail[id] && Date.now() - S.fail[id] < 600000) return '<small>' + E + '</small><b class="gm">Alınamadı</b>' + (S.err[id] ? '<div class="acc-t">' + esc(S.err[id]) + '</div>' : '');
+      if(S.fail[id] && Date.now() - S.fail[id] < FAIL_MS) return '<small>' + E + '</small><b class="gm">Şimdilik alınamadı</b><div class="acc-t">Biraz sonra kendiliğinden tekrar denenecek.' + (S.err[id] ? ' (' + esc(S.err[id]) + ')' : '') + '</div>';
       return '<small>' + E + '</small><b class="gm">Aranıyor…</b>';
     }
     if(g.n === 1 && !g.t) return '<small>' + E + '</small><b class="gm">Accurace verisi yok</b><div class="acc-t">Son koşuları Accurace kapsamında değil.</div>';
     var e = etiket(g), gun = gunMetni(g.t), pist = pistGec(g.pist);
     var bilgi = [g.t, g.hip, g.mesafe ? g.mesafe + ' m' + (pist ? ' ' + pist : '') : pist, g.no + '. Koşu'].filter(Boolean).map(esc).join(' · ');
-    var satir = function(k, r){ return r ? '<div class="acc-r2"><span class="acc-k">' + k + '</span><span class="acc-v ' + r[0] + '">' + esc(r[1]) + '</span></div>' : ''; };
-    var sirap = g.sira ? '<span class="acc-p">' + g.sira + '. geldi <i>/ ' + g.n + ' at</i></span>' : '<span class="acc-p"><i>' + g.n + ' at</i></span>';
+    var satir = function(k, r){ return r ? '<div class="acc-r2"><span class="acc-k">' + k + '</span><span class="acc-v"><b class="' + r[0] + '">' + esc(r[1]) + '</b> · ' + esc(r[2]) + '</span></div>' : ''; };
+    var pc = g.sira === 1 ? ' p1' : g.sira === 2 ? ' p2' : g.sira === 3 ? ' p3' : g.sira >= 6 ? ' bk' : '';
+    var sirap = g.sira ? '<span class="acc-p' + pc + '">' + g.sira + '. geldi <i>/ ' + g.n + ' at</i></span>' : '<span class="acc-p"><i>' + g.n + ' at</i></span>';
     return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small>'
       + '<div class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b>' + sirap + '</div>'
       + '<div class="acc-m">' + bilgi + '</div>'
@@ -222,7 +249,7 @@
         atSonAccurace(it.id, it.ad).then(function(r){
           S.c[it.id] = Object.assign({ ts: Date.now() }, r); save(); delete S.fail[it.id]; delete S.err[it.id];
         }).catch(function(e){
-          S.fail[it.id] = Date.now(); S.err[it.id] = String((e && e.message) || e).slice(0, 200);
+          S.fail[it.id] = Date.now(); S.err[it.id] = String((e && e.message) || e).slice(0, 60);
         }).finally(function(){
           S.run--; delete S.busy[it.id]; yenile(it.id); setTimeout(pompa, 250);
         });
@@ -234,12 +261,12 @@
     root.querySelectorAll('.hacc[data-id]').forEach(function(el){
       var id = el.dataset.id;
       if(get(id)) return;
-      if(S.fail[id] && Date.now() - S.fail[id] < 600000) return;
+      if(S.fail[id] && Date.now() - S.fail[id] < FAIL_MS) return;
       if(S.busy[id]) return;
       S.busy[id] = 1; gor.push({ id: id, ad: el.dataset.ad });
     });
     S.q.unshift.apply(S.q, gor); pompa();
   };
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) pompa(); });
-  window.__acc = { pistGec: pistGec, adNorm: adNorm, metinAyristir: metinAyristir, kosuHazirla: kosuHazirla, etiket: etiket, yolMetni: yolMetni, finisMetni: finisMetni };
+  window.__acc = { pistGec: pistGec, adNorm: adNorm, kosuHazirla: kosuHazirla, etiket: etiket, yolMetni: yolMetni, finisMetni: finisMetni };
 })();
