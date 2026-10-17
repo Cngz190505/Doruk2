@@ -249,7 +249,7 @@ function takiTip(el){
 function takiChips(d){
   const list = (d.takiDetay && d.takiDetay.length) ? d.takiDetay : String(d.taki || '').split(/\s+/).filter(Boolean).map(k => ({k, a: ''}));
   if(!list.length) return '';
-  const nokta = d.atId ? `<button type="button" class="tkd" hidden data-id="${esc(d.atId)}" data-cur="${esc(list.map(x => x.k).join(' '))}" aria-label="Takı değişti" onclick="event.stopPropagation();takiTip(this)"></button>` : '';
+  const nokta = d.atId ? `<span class="tkd" hidden data-id="${esc(d.atId)}" data-cur="${esc(list.map(x => x.k).join(' '))}"><i></i><b></b></span>` : '';
   return `<div class="tkw">${nokta}${list.map(x => {
     const k = String(x.k).toUpperCase(), ac = x.a || TAKI_ACIKLAMA[k] || (TAKI_AD[k] ? TAKI_AD[k] + ' takılacağını ifade eder.' : 'Açıklama bulunamadı.');
     return `<button class="tkc" data-t="${esc(ac)}" onclick="event.stopPropagation();takiTip(this)"><b>${esc(x.k)}</b></button>`;
@@ -299,7 +299,7 @@ function tkdBoya(root, id){
       degisti = !(bugun.length === once.length && bugun.every(x => once.includes(x)));
       neden = degisti ? 'Önceki takılar: ' + (once.join(' ') || 'takısız') : 'Takı değişmedi (önceki: ' + (once.join(' ') || 'takısız') + ', bugün: ' + bugun.join(' ') + ')';
     }
-    el.dataset.t = neden;
+    const yz = el.querySelector('b'); if(yz) yz.textContent = degisti ? neden.replace('Önceki takılar:', 'Önceki:') : neden;
     el.classList.toggle('dbg', !degisti);
     el.hidden = TKD_DEBUG ? false : !degisti;
   });
