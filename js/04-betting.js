@@ -376,11 +376,6 @@ function animTg(btn, set){
 function detTg(btn){ animTg(btn, _detClosed); }
 const _moreClosed = new Set();
 function moreTg(btn){ animTg(btn, _moreClosed); }
-// Bugünkü koşunun bilgisi (Accurace kartındaki "Bugün için" satırları için)
-function accBugun(d){
-  const ri = raceInfo(city, race) || {};
-  return { mesafe: ri.mesafe, pist: ri.pist, sehir: city, taki: d && d.taki != null ? d.taki : (d && d.takiDetay && d.takiDetay.length ? d.takiDetay.map(x => x.k).join(' ') : null) };
-}
 // Ekürü: aynı koşuda aynı sahibe ait diğer atlar
 function ekuriHtml(h){
   const d = h.d; if(!d || !d.sahip || h.kosmaz) return '';
@@ -415,7 +410,7 @@ function infoPanel(h){
   const ek = ekuriHtml(h);
   const top = (s6 || tk || ek) ? `${(s6 || tk) ? `<div class="hrow">${s6}${tk}</div>` : ''}${ek}` : '';
   if(!top && !stats && !best && !lines && !(d && d.atId)) return '';
-  const inner = `${stats ? `<div class="hst">${stats}</div>` : ''}${best}${galipBlock(d)}${window.accBlock ? accBlock(d, h, accBugun(d)) : ''}${lines ? `<div class="hdet" data-k="${esc(detKey(h))}" onclick="event.stopPropagation()"><button type="button" class="hd-s" aria-expanded="false" onclick="detTg(this)"><span>Orijin, sahip, antrenör</span></button><div class="anim"><div class="anim-in"><div class="hls">${lines}</div></div></div></div>` : ''}`;
+  const inner = `${stats ? `<div class="hst">${stats}</div>` : ''}${best}${galipBlock(d)}${lines ? `<div class="hdet" data-k="${esc(detKey(h))}" onclick="event.stopPropagation()"><button type="button" class="hd-s" aria-expanded="false" onclick="detTg(this)"><span>Orijin, sahip, antrenör</span></button><div class="anim"><div class="anim-in"><div class="hls">${lines}</div></div></div></div>` : ''}`;
   if(!inner.trim()) return top ? `<div class="hinfo">${top}</div>` : '';
   // Kapalıyken tek satır özet: yaş · sıklet · HP · son koşu. "Detay" ile tüm bilgiler açılır
   const prev = [v(d.yas) ? esc(d.yas) : '', sik ? esc(sik) + ' kg' : '', v(d.hp) ? '<b class="hp">HP ' + esc(d.hp) + '</b>' : '', kgsTxt ? `<b class="${kgsCls}">${esc(kgsTxt)}</b>` : ''].filter(Boolean).join(' · ');
@@ -474,7 +469,7 @@ function applyOpen(root){
     const s = b.firstElementChild; if(s) s.setAttribute('aria-expanded', String(!kapali));
   });
 }
-const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list'){ applyOpen(el); galipYukle(el); if(window.accYukle) accYukle(el); } } };
+const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list'){ applyOpen(el); galipYukle(el); } } };
 function renderBulten(){
   const y = window.scrollY;
   _renderBulten();
