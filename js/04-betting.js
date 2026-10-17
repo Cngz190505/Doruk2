@@ -275,7 +275,9 @@ function galipGun(t){
 function galipInner(k, id){
   const o = GL[k], g = galipGet(k, id);
   if(!g) return o.fail[id] && Date.now() - o.fail[id] < 600000
-    ? `<div><small>${o.label}</small><b class="gm">Alınamadı</b></div>${o.err[id] ? `<span>${esc(o.err[id])}</span>` : ''}`
+    ? (/HTTP 404/.test(o.err[id] || '')
+      ? `<div><small>${o.label}</small><b class="gm">TJK'da kayıt yok</b></div>`
+      : `<div><small>${o.label}</small><b class="gm">Alınamadı</b></div>${o.err[id] ? `<span>${esc(o.err[id])}</span>` : ''}`)
     : `<div><small>${o.label}</small><b class="gm">Aranıyor…</b></div>`;
   if(g.n) return `<div><small>${o.label}</small><b class="gm">${o.none}</b></div>`;
   const gun = galipGun(g.t);
