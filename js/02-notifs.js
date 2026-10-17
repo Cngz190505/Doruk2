@@ -161,6 +161,8 @@ $('bi').innerHTML = ic('bell', 21);
 $('menu-btn').innerHTML = ic('menu', 21);
 $('dw-x').innerHTML = ic('x', 20);
 $('dw-out').innerHTML = '<i>' + ic('logout', 18) + '</i>Oturumu kapat';
+P.oran = 'M3 17l6-6 4 4 8-8M14 7h7v7';
+$('dw-oranlar').innerHTML = '<i>' + ic('oran', 20) + '</i>Oranlar';
 $('dw-kurallar').innerHTML = '<i>' + ic('book', 20) + '</i>Kurallar';
 $('shsheet-x').innerHTML = ic('x', 20);
 $('dw-shop').innerHTML = '<i>' + ic('gem', 18) + '</i>Mağaza';
@@ -201,11 +203,12 @@ function switchTab(t){
   $('tab-' + t).classList.remove('hidden');
   Object.keys(NAV).forEach(k => $('nav-' + k).classList.toggle('on', k === t));
   $('dw-kurallar').classList.toggle('on', t === 'kurallar');
+  $('dw-oranlar').classList.toggle('on', t === 'oranlar');
   $('draft').classList.add('hidden');
   document.body.classList.remove('has-draft');
   document.body.dataset.tab = t;
   
-  ({feed:renderFeed, bulten:renderBulten, sonuc:renderSonuc, leaderboard:renderLeaders, kurallar:renderKurallar, profile:renderProfile})[t]();
+  ({feed:renderFeed, bulten:renderBulten, sonuc:renderSonuc, leaderboard:renderLeaders, kurallar:renderKurallar, oranlar:renderOranlar, profile:renderProfile})[t]();
   window.scrollTo({top:0, behavior:'instant'});
   if(t === 'bulten' && city) kosuSonucCek(city, race);
 }
@@ -229,11 +232,11 @@ function feedTap(){
   }, 700);
 }
 function visible(){
-  return ['feed','bulten','sonuc','leaderboard','kurallar','profile'].find(t => !$('tab-' + t).classList.contains('hidden'));
+  return ['feed','bulten','sonuc','leaderboard','kurallar','oranlar','profile'].find(t => !$('tab-' + t).classList.contains('hidden'));
 }
 function rerender(){
   const v = visible(), pl = v === 'profile' ? $('plist') : null, y = pl ? pl.scrollTop : 0;
-  ({feed:renderFeed, bulten:renderBulten, sonuc:renderSonuc, leaderboard:renderLeaders, kurallar:renderKurallar, profile:renderProfile})[v]();
+  ({feed:renderFeed, bulten:renderBulten, sonuc:renderSonuc, leaderboard:renderLeaders, kurallar:renderKurallar, oranlar:renderOranlar, profile:renderProfile})[v]();
   if(v === 'profile' && $('plist')) $('plist').scrollTop = y;
   if(typeof cmSheetId !== 'undefined' && cmSheetId != null) renderCmSheet(false);
 }
