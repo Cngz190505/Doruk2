@@ -134,6 +134,7 @@
       var iH = heads.findIndex(function(h){ return /hip|şehir|sehir/.test(h); });
       var iM = heads.findIndex(function(h){ return /msf|mesafe/.test(h); });
       var iP = heads.findIndex(function(h, i){ return i !== iM && /pist|zemin/.test(h); });
+      var iS = heads.findIndex(function(h){ return /start/.test(h); });   // yoksa -1: start rozeti çıkmaz
       var iX = heads.findIndex(function(h){ return /ekstra|tak[ıi]|donan/.test(h); });   // yoksa -1: takı karşılaştırması yapılmaz
       if(iT < 0 || iH < 0) continue;
       var out = [];
@@ -142,7 +143,7 @@
         var t = norm(td[iT].textContent); if(!/\d{2}\.\d{2}\.\d{4}/.test(t)) continue;
         var sr = iS >= 0 && td[iS] ? parseInt(norm(td[iS].textContent), 10) : NaN;
         var pt = iP >= 0 && td[iP] ? norm(td[iP].textContent) : (iM >= 0 && td[iM] ? ((td[iM].querySelector('[title],img[alt]') || {}).title || '') : '');
-        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent), pist: pistGec(pt), taki: iX >= 0 && td[iX] ? norm(td[iX].textContent + ' ' + (td[iX].title || '')) : null });
+        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent), pist: pistGec(pt), start: iS >= 0 && td[iS] ? /sorun|geç|problem|evet|var|1/i.test(norm(td[iS].textContent)) : null, taki: iX >= 0 && td[iX] ? norm(td[iX].textContent + ' ' + (td[iX].title || '')) : null });
       }
       return out;
     }
@@ -163,11 +164,13 @@
   async function atSonAccurace(atId, isim){
     var ad = adNorm(isim), rows;
     try { rows = await atGecmis(atId); } catch(e){ if(yok404(e)) return { n: 1 }; throw e; }
+    // Start sorunu: son 5 koşuda işaretli olanların sayısı (tabloda start bilgisi yoksa null kalır)
+    var st5 = rows.slice(0, 5).filter(function(x){ return x.start != null; }), startSay = st5.filter(function(x){ return x.start; }).length, startN = st5.length;
     var hata = false;
     for(var i = 0; i < rows.length; i++){
       var r = rows[i], iso = tarihIso(r.t), kod = sehirKodu(String(r.hip).split(/\s+/)[0]); if(!iso || !kod) continue;
       var b = await atiBul(iso, kod, ad);
-      if(b.k) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, taki: r.taki, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
+      if(b.k) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, taki: r.taki, startSay: startSay, startN: startN, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
         sira: r.sira || b.a.sira, delta: b.a.delta, s100: b.a.sure, s100sira: b.a.s100sira, s100en: b.k.meta.s100en };
       if(b.hata) hata = true;
     }
@@ -231,15 +234,23 @@
       else r = ['warn', 'Pist değişti', gp + ' → ' + kp];
     }
     if(r) rows.push(r);
+    return rows;
+  }
+  // Rozetler: yeşil = değişti, kırmızı = sorun. Dokununca açıklama çıkar (takiTip).
+  function rozetler(g, k){
+    var out = [];
+    if(!k) return out;
     if(k.sehir && g.hip && ilkKelime(k.sehir) && ilkKelime(g.hip) && ilkKelime(k.sehir) !== ilkKelime(g.hip))
-      rows.push(['warn', 'Şehir değişti', String(g.hip).split(/\s+/)[0] + ' → ' + k.sehir]);
+      out.push({ c: 'g', y: 'Şehir değişti', t: 'Son koşusu ' + String(g.hip).split(/\s+/)[0] + ' hipodromundaydı, bugün ' + k.sehir + '\'da koşuyor.' });
     if(k.taki != null && g.taki != null){
       var onceki = takiKod(g.taki), simdi = takiKod(k.taki);
       var yeni = simdi.filter(function(x){ return onceki.indexOf(x) < 0; }), cikan = onceki.filter(function(x){ return simdi.indexOf(x) < 0; });
       if(yeni.length || cikan.length)
-        rows.push(['warn', 'Takı değişti', 'Son koşuda: ' + (onceki.join(' ') || 'takısız') + ' → bugün: ' + (simdi.join(' ') || 'takısız')]);
+        out.push({ c: 'g', y: 'Takı değişti', t: 'Önceki takılar: ' + (onceki.join(' ') || 'takısız') + '. Bugün: ' + (simdi.join(' ') || 'takısız') + '.' });
     }
-    return rows;
+    if(g.startSay >= 2)
+      out.push({ c: 'r', y: 'Start sorunu', t: 'Son ' + g.startN + ' koşusunun ' + g.startSay + '\'inde start sorunu yaşadı.' });
+    return out;
   }
   var bugunSatiri = function(g, k){ return bugunSatirlari(g, k)[0] || null; };
   function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + ' · ' + r[2] + '. ' : ''; }
@@ -267,8 +278,10 @@
     var pc = g.sira === 1 ? ' p1' : g.sira === 2 ? ' p2' : g.sira === 3 ? ' p3' : g.sira >= 6 ? ' bk' : '';
     var sirap = g.sira ? '<span class="acc-p' + pc + '">' + g.sira + '. geldi <i>/ ' + g.n + ' at</i></span>' : '<span class="acc-p"><i>' + g.n + ' at</i></span>';
     var detay = satir('Yol', yolSatiri(g)) + satir('Son 100 m', finisSatiri(g));
+    var roz = rozetler(g, k).map(function(r){ return '<button type="button" class="acc-rz ' + r.c + '" data-t="' + esc(r.t) + '" onclick="event.stopPropagation();takiTip(this)"><i></i>' + esc(r.y) + '</button>'; }).join('');
     return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small>'
       + '<details class="acc-d"><summary class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b><span class="acc-s">' + sirap + '<span class="acc-cv">▾</span></span></summary>'
+      + (roz ? '<div class="acc-rzs">' + roz + '</div>' : '')
       + '<div class="acc-m">' + bilgi + '</div>' + detay + '</details>'
       + bugunSatirlari(g, k).map(function(r, i){ return satir(i ? '' : 'Bugün için', r); }).join('');
   }
