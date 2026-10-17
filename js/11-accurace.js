@@ -174,32 +174,60 @@
     return { n: 1 };
   }
 
-  // ---- etiket kuralı (konuştuğumuz eşikler) ----
+  // ---- tek karar: yol + finiş birlikte değerlendirilir ----
+  // puan: +1 = sonucu olduğundan kötü görünüyor / finişi güçlü, -1 = sonucu olduğundan iyi görünüyor / finişi zayıf
+  function puanlar(g){
+    var u1 = Math.ceil(g.n / 3), u2 = Math.ceil(g.n * 2 / 3);
+    var yol = g.delta == null ? 0 : g.delta >= 2 ? 1 : g.delta <= -2 ? -1 : 0;
+    var fin = !g.s100sira ? 0 : g.s100sira <= u1 ? 1 : g.s100sira > u2 ? -1 : 0;
+    return { yol: yol, fin: fin, top: yol + fin };
+  }
   function etiket(g){
-    var ucte1 = Math.ceil(g.n / 3), ucte2 = Math.ceil(g.n * 2 / 3);
-    var hizli = g.s100sira && g.s100sira <= ucte1, yavas = g.s100sira && g.s100sira > ucte2;
-    if(g.delta != null && g.delta >= 5 && hizli) return { c: 'acc-g', e: '🟢', y: 'Şanssız koştu, güçlü' };
-    if(g.delta != null && g.delta <= -2) return { c: 'acc-o', e: '🟠', y: 'Sonucu şişmiş olabilir' };
-    if(yavas && g.sira !== 1) return { c: 'acc-r', e: '🔴', y: 'Finişte tükendi' };
-    return { c: 'acc-n', e: '⚪', y: 'Normal koştu' };
+    var p = puanlar(g), kazandi = g.sira === 1;
+    if(kazandi && p.top >= 0) return { c: 'acc-g', e: '👍', y: 'Sonucunu hak etti' };
+    if(kazandi) return { c: 'acc-r', e: '👎', y: 'Kazandı ama güvenme' };
+    if(p.top >= 1) return { c: 'acc-g', e: '👍', y: 'Sonucundan iyi bir at' };
+    if(p.top <= -1) return { c: 'acc-r', e: '👎', y: 'Son koşusuna güvenme' };
+    return { c: 'acc-n', e: '➖', y: 'Sonucu doğru' };
   }
   var vir = function(x, d){ return Number(x).toFixed(d == null ? 1 : d).replace('.', ','); };
   // Satır: [renk sınıfı, kalın durum yazısı, açıklama]. pos=yeşil, warn=turuncu, bad=kırmızı, nt=gri
   function yolSatiri(g){
     if(g.delta == null) return null;
-    if(g.delta >= 2) return ['pos', 'Dışarıdan dolaştı', vir(g.delta) + ' m fazla yol koştu, sonucu olduğundan kötü görünüyor'];
-    if(g.delta <= -2) return ['warn', 'Kısa yoldan gitti', vir(-g.delta) + ' m az yol koştu, sonucu olduğundan iyi görünüyor'];
-    return ['nt', 'Yolu sıradandı', 'kazananla yol farkı çok az (' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + vir(Math.abs(g.delta)) + ' m)'];
+    if(g.delta >= 2) return ['pos', 'Fazla yol koştu', 'Rakiplerden ' + vir(g.delta) + ' m daha uzun yol gitti, bu yüzden geride kalmış olabilir'];
+    if(g.delta <= -2) return ['warn', 'Kısa yoldan gitti', 'Rakiplerden ' + vir(-g.delta) + ' m daha kısa yol gitti, bu yüzden işi kolaydı'];
+    return ['nt', 'Yolu normaldi', 'Fazla ya da az yol koşmadı'];
   }
   function finisSatiri(g){
     if(!g.s100sira || !g.s100) return null;
     var u1 = Math.ceil(g.n / 3), u2 = Math.ceil(g.n * 2 / 3);
     var fark = g.s100en != null ? g.s100 - g.s100en : null;
-    var d = vir(g.s100, 2) + ' sn' + (fark != null && fark > 0.004 ? ' · koşunun en hızlı atından ' + vir(fark, 2) + ' sn geride' : fark != null ? ' · koşunun en hızlı finişi' : '');
-    if(g.s100sira === 1) return ['pos', 'Finişte koşunun en hızlısıydı', vir(g.s100, 2) + ' sn'];
-    if(g.s100sira <= u1) return ['pos', 'Finişte güçlüydü', d];
-    if(g.s100sira > u2) return ['bad', 'Finişte zayıftı', d];
-    return ['nt', 'Finişi ortalamaydı', d];
+    var d = 'Son 100 m: ' + vir(g.s100, 2) + ' sn' + (fark != null && fark > 0.004 ? ' (bu koşunun en iyisi: ' + vir(g.s100en, 2) + ' sn)' : '');
+    if(g.s100sira === 1) return ['pos', 'Finişi çok güçlüydü', 'Son 100 m\'yi koşunun en hızlısı koştu (' + vir(g.s100, 2) + ' sn)'];
+    if(g.s100sira <= u1) return ['pos', 'Finişi güçlüydü', d];
+    if(g.s100sira > u2) return ['bad', 'Finişte yoruldu', d];
+    return ['nt', 'Finişi normaldi', d];
+  }
+  // Son koşu ile bugünkü koşuyu karşılaştırır (mesafe + pist)
+  function bugunSatiri(g, k){
+    if(!k) return null;
+    var p = puanlar(g), gm = g.mesafe, bm = k.mesafe, kp = pistGec(k.pist), gp = pistGec(g.pist);
+    var pistNot = (kp && gp && kp !== gp) ? 'Pist değişti: ' + gp + ' → ' + kp : '';
+    var r = null;
+    if(gm && bm){
+      var f = bm - gm, uz = f >= 200, ks = f <= -200, yz = gm + ' → ' + bm + ' m';
+      if(p.fin < 0 && ks) r = ['pos', 'Mesafe ona uygun', 'Mesafe kısalıyor (' + yz + '), finişte yorulma riski azalır'];
+      else if(p.fin < 0 && uz) r = ['bad', 'Mesafe riskli', 'Mesafe uzuyor (' + yz + '), finişte yorulan at için zor'];
+      else if(p.fin > 0 && uz) r = ['pos', 'Mesafe ona uygun', 'Mesafe uzuyor (' + yz + '), güçlü finişi işe yarar'];
+      else if(p.fin > 0 && ks) r = ['warn', 'Mesafe kısalıyor', yz + ', finiş gücünü kullanacak yer azalır'];
+      else if(!uz && !ks) r = ['nt', 'Aynı mesafe', 'Son koşuyla doğrudan karşılaştırılabilir (' + bm + ' m)'];
+      else r = ['nt', 'Mesafe değişiyor', yz];
+    }
+    if(pistNot){
+      if(r){ r[2] += ' · ' + pistNot; if(r[0] === 'nt') r[0] = 'warn'; }
+      else r = ['warn', 'Pist değişti', gp + ' → ' + kp];
+    }
+    return r;
   }
   function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + ' · ' + r[2] + '. ' : ''; }
   function finisMetni(g){ var r = finisSatiri(g); return r ? r[1] + ' · ' + r[2] + '.' : ''; }
@@ -212,7 +240,7 @@
 
   // ---- görünüm ----
   var get = function(id){ var g = S.c[id]; return g && Date.now() - g.ts < ACC_TTL ? g : null; };
-  function inner(id){
+  function inner(id, el){
     var g = get(id), E = 'Son koşu analizi';
     if(!g){
       if(S.fail[id] && Date.now() - S.fail[id] < FAIL_MS) return '<small>' + E + '</small><b class="gm">Şimdilik alınamadı</b><div class="acc-t">Biraz sonra kendiliğinden tekrar denenecek.' + (S.err[id] ? ' (' + esc(S.err[id]) + ')' : '') + '</div>';
@@ -220,23 +248,36 @@
     }
     if(g.n === 1 && !g.t) return '<small>' + E + '</small><b class="gm">Accurace verisi yok</b><div class="acc-t">Son koşuları Accurace kapsamında değil.</div>';
     var e = etiket(g), gun = gunMetni(g.t), pist = pistGec(g.pist);
+    var k = el && el.dataset ? { mesafe: Number(el.dataset.bm) || null, pist: el.dataset.bp || '' } : null;
     var bilgi = [g.t, g.hip, g.mesafe ? g.mesafe + ' m' + (pist ? ' ' + pist : '') : pist, g.no + '. Koşu'].filter(Boolean).map(esc).join(' · ');
-    var satir = function(k, r){ return r ? '<div class="acc-r2"><span class="acc-k">' + k + '</span><span class="acc-v"><b class="' + r[0] + '">' + esc(r[1]) + '</b> · ' + esc(r[2]) + '</span></div>' : ''; };
+    var satir = function(kk, r, cl){ return r ? '<div class="acc-r2' + (cl ? ' ' + cl : '') + '"><span class="acc-k">' + kk + '</span><span class="acc-v"><b class="' + r[0] + '">' + esc(r[1]) + '</b> · ' + esc(r[2]) + '</span></div>' : ''; };
     var pc = g.sira === 1 ? ' p1' : g.sira === 2 ? ' p2' : g.sira === 3 ? ' p3' : g.sira >= 6 ? ' bk' : '';
     var sirap = g.sira ? '<span class="acc-p' + pc + '">' + g.sira + '. geldi <i>/ ' + g.n + ' at</i></span>' : '<span class="acc-p"><i>' + g.n + ' at</i></span>';
+    var detay = satir('Yol', yolSatiri(g)) + satir('Son 100 m', finisSatiri(g));
     return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small>'
-      + '<div class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b>' + sirap + '</div>'
-      + '<div class="acc-m">' + bilgi + '</div>'
-      + satir('Yol', yolSatiri(g)) + satir('Son 100 m', finisSatiri(g));
+      + '<details class="acc-d"><summary class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b><span class="acc-s">' + sirap + '<span class="acc-cv">▾</span></span></summary>'
+      + '<div class="acc-m">' + bilgi + '</div>' + detay + '</details>'
+      + satir('Bugün için', bugunSatiri(g, k));
   }
   function cls(id){ var g = get(id); return g && g.t ? etiket(g).c : 'acc-n'; }
-  window.accBlock = function(d, h){
+  // Bugünkü koşunun mesafesi/pisti: accBlock(d, h, k) ile k={mesafe, pist} verilebilir; yoksa d/h içindeki alanlara bakılır.
+  function bugunOku(d, h, k){
+    var kaynak = [k, h, d], m = null, p = '';
+    kaynak.forEach(function(x){
+      if(!x) return;
+      if(!m){ var v = parseInt(x.mesafe || x.dist || x.distance || x.msf, 10); if(v > 0) m = v; }
+      if(!p){ p = String(x.pist || x.track || x.zemin || ''); }
+    });
+    return { m: m, p: pistGec(p) };
+  }
+  window.accBlock = function(d, h, k){
     if(!d || !d.atId || !h || !h.name) return '';
-    return '<div class="hacc ' + cls(d.atId) + '" data-id="' + esc(d.atId) + '" data-ad="' + esc(h.name) + '">' + inner(d.atId) + '</div>';
+    var b = bugunOku(d, h, k);
+    return '<div class="hacc ' + cls(d.atId) + '" data-id="' + esc(d.atId) + '" data-ad="' + esc(h.name) + '"' + (b.m ? ' data-bm="' + b.m + '"' : '') + (b.p ? ' data-bp="' + esc(b.p) + '"' : '') + '>' + inner(d.atId, { dataset: { bm: b.m || '', bp: b.p || '' } }) + '</div>';
   };
   function yenile(id){
     document.querySelectorAll('.hacc[data-id="' + id + '"]').forEach(function(el){
-      el.innerHTML = inner(id); el.className = 'hacc ' + cls(id);
+      el.innerHTML = inner(id, el); el.className = 'hacc ' + cls(id);
     });
   }
 
@@ -268,5 +309,5 @@
     S.q.unshift.apply(S.q, gor); pompa();
   };
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) pompa(); });
-  window.__acc = { pistGec: pistGec, adNorm: adNorm, kosuHazirla: kosuHazirla, etiket: etiket, yolMetni: yolMetni, finisMetni: finisMetni };
+  window.__acc = { pistGec: pistGec, adNorm: adNorm, kosuHazirla: kosuHazirla, etiket: etiket, bugunSatiri: bugunSatiri, yolMetni: yolMetni, finisMetni: finisMetni };
 })();
