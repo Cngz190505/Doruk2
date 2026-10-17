@@ -7,7 +7,7 @@
   var BOS_TTL = 6 * 3600 * 1000;         // boş koşu sayfası 6 saat
   var FAIL_MS = 120000;                  // hata sonrası 2 dk bekle, sonra yeniden dene
   var SON_N = 2;                          // her at için bakılacak son koşu sayısı
-  var KEY = 'gs_acc_v4', RKEY = 'gs_accr_v4_';
+  var KEY = 'gs_acc_v5', RKEY = 'gs_accr_v4_';
   var S = { c: {}, fail: {}, err: {}, busy: {}, q: [], run: 0, fly: {} };
   try { S.c = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e){ S.c = {}; }
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(S.c)); } catch(e){} }
@@ -134,6 +134,7 @@
       var iH = heads.findIndex(function(h){ return /hip|şehir|sehir/.test(h); });
       var iM = heads.findIndex(function(h){ return /msf|mesafe/.test(h); });
       var iP = heads.findIndex(function(h, i){ return i !== iM && /pist|zemin/.test(h); });
+      var iX = heads.findIndex(function(h){ return /ekstra|tak[ıi]|donan/.test(h); });   // yoksa -1: takı karşılaştırması yapılmaz
       if(iT < 0 || iH < 0) continue;
       var out = [];
       for(var i = hi + 1; i < rows.length && out.length < SON_N; i++){
@@ -141,7 +142,7 @@
         var t = norm(td[iT].textContent); if(!/\d{2}\.\d{2}\.\d{4}/.test(t)) continue;
         var sr = iS >= 0 && td[iS] ? parseInt(norm(td[iS].textContent), 10) : NaN;
         var pt = iP >= 0 && td[iP] ? norm(td[iP].textContent) : (iM >= 0 && td[iM] ? ((td[iM].querySelector('[title],img[alt]') || {}).title || '') : '');
-        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent), pist: pistGec(pt) });
+        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent), pist: pistGec(pt), taki: iX >= 0 && td[iX] ? norm(td[iX].textContent + ' ' + (td[iX].title || '')) : null });
       }
       return out;
     }
@@ -166,7 +167,7 @@
     for(var i = 0; i < rows.length; i++){
       var r = rows[i], iso = tarihIso(r.t), kod = sehirKodu(String(r.hip).split(/\s+/)[0]); if(!iso || !kod) continue;
       var b = await atiBul(iso, kod, ad);
-      if(b.k) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
+      if(b.k) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, taki: r.taki, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
         sira: r.sira || b.a.sira, delta: b.a.delta, s100: b.a.sure, s100sira: b.a.s100sira, s100en: b.k.meta.s100en };
       if(b.hata) hata = true;
     }
@@ -208,10 +209,12 @@
     if(g.s100sira > u2) return ['bad', 'Finişte yoruldu', d];
     return ['nt', 'Finişi normaldi', d];
   }
-  // Son koşu ile bugünkü koşuyu karşılaştırır (mesafe + pist)
-  function bugunSatiri(g, k){
-    if(!k) return null;
-    var p = puanlar(g), gm = g.mesafe, bm = k.mesafe, kp = pistGec(k.pist), gp = pistGec(g.pist);
+  // Son koşu ile bugünkü koşuyu karşılaştırır: mesafe/pist, şehir, takı. Satır listesi döner.
+  var takiKod = function(t){ return String(t || '').toLocaleUpperCase('tr-TR').match(/[A-ZÇĞİÖŞÜ]{1,4}/g) || []; };
+  var ilkKelime = function(t){ return adNorm(String(t || '').split(/\s+/)[0]); };
+  function bugunSatirlari(g, k){
+    if(!k) return [];
+    var p = puanlar(g), gm = g.mesafe, bm = k.mesafe, kp = pistGec(k.pist), gp = pistGec(g.pist), rows = [];
     var pistNot = (kp && gp && kp !== gp) ? 'Pist değişti: ' + gp + ' → ' + kp : '';
     var r = null;
     if(gm && bm){
@@ -227,8 +230,18 @@
       if(r){ r[2] += ' · ' + pistNot; if(r[0] === 'nt') r[0] = 'warn'; }
       else r = ['warn', 'Pist değişti', gp + ' → ' + kp];
     }
-    return r;
+    if(r) rows.push(r);
+    if(k.sehir && g.hip && ilkKelime(k.sehir) && ilkKelime(g.hip) && ilkKelime(k.sehir) !== ilkKelime(g.hip))
+      rows.push(['warn', 'Şehir değişti', String(g.hip).split(/\s+/)[0] + ' → ' + k.sehir]);
+    if(k.taki != null && g.taki != null){
+      var onceki = takiKod(g.taki), simdi = takiKod(k.taki);
+      var yeni = simdi.filter(function(x){ return onceki.indexOf(x) < 0; }), cikan = onceki.filter(function(x){ return simdi.indexOf(x) < 0; });
+      if(yeni.length || cikan.length)
+        rows.push(['warn', 'Takı değişti', 'Son koşuda: ' + (onceki.join(' ') || 'takısız') + ' → bugün: ' + (simdi.join(' ') || 'takısız')]);
+    }
+    return rows;
   }
+  var bugunSatiri = function(g, k){ return bugunSatirlari(g, k)[0] || null; };
   function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + ' · ' + r[2] + '. ' : ''; }
   function finisMetni(g){ var r = finisSatiri(g); return r ? r[1] + ' · ' + r[2] + '.' : ''; }
   function gunMetni(t){
@@ -248,7 +261,7 @@
     }
     if(g.n === 1 && !g.t) return '<small>' + E + '</small><b class="gm">Accurace verisi yok</b><div class="acc-t">Son koşuları Accurace kapsamında değil.</div>';
     var e = etiket(g), gun = gunMetni(g.t), pist = pistGec(g.pist);
-    var k = el && el.dataset ? { mesafe: Number(el.dataset.bm) || null, pist: el.dataset.bp || '' } : null;
+    var k = el && el.dataset ? { mesafe: Number(el.dataset.bm) || null, pist: el.dataset.bp || '', sehir: el.dataset.bs || '', taki: el.dataset.bt != null && el.dataset.bt !== '' ? (el.dataset.bt === '-' ? '' : el.dataset.bt) : null } : null;
     var bilgi = [g.t, g.hip, g.mesafe ? g.mesafe + ' m' + (pist ? ' ' + pist : '') : pist, g.no + '. Koşu'].filter(Boolean).map(esc).join(' · ');
     var satir = function(kk, r, cl){ return r ? '<div class="acc-r2' + (cl ? ' ' + cl : '') + '"><span class="acc-k">' + kk + '</span><span class="acc-v"><b class="' + r[0] + '">' + esc(r[1]) + '</b> · ' + esc(r[2]) + '</span></div>' : ''; };
     var pc = g.sira === 1 ? ' p1' : g.sira === 2 ? ' p2' : g.sira === 3 ? ' p3' : g.sira >= 6 ? ' bk' : '';
@@ -257,23 +270,28 @@
     return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small>'
       + '<details class="acc-d"><summary class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b><span class="acc-s">' + sirap + '<span class="acc-cv">▾</span></span></summary>'
       + '<div class="acc-m">' + bilgi + '</div>' + detay + '</details>'
-      + satir('Bugün için', bugunSatiri(g, k));
+      + bugunSatirlari(g, k).map(function(r, i){ return satir(i ? '' : 'Bugün için', r); }).join('');
   }
   function cls(id){ var g = get(id); return g && g.t ? etiket(g).c : 'acc-n'; }
-  // Bugünkü koşunun mesafesi/pisti: accBlock(d, h, k) ile k={mesafe, pist} verilebilir; yoksa d/h içindeki alanlara bakılır.
+  // Bugünkü koşu bilgisi: k={mesafe, pist, sehir, taki}. taki: null = bilinmiyor, '' = takısız.
   function bugunOku(d, h, k){
-    var kaynak = [k, h, d], m = null, p = '';
+    var kaynak = [k, h, d], m = null, p = '', sh = '', t = null;
     kaynak.forEach(function(x){
       if(!x) return;
       if(!m){ var v = parseInt(x.mesafe || x.dist || x.distance || x.msf, 10); if(v > 0) m = v; }
       if(!p){ p = String(x.pist || x.track || x.zemin || ''); }
+      if(!sh){ sh = String(x.sehir || ''); }
+      if(t == null && x.taki != null) t = String(x.taki);
     });
-    return { m: m, p: pistGec(p) };
+    return { m: m, p: pistGec(p), s: sh, t: t };
+  }
+  function bugunAttr(b){
+    return (b.m ? ' data-bm="' + b.m + '"' : '') + (b.p ? ' data-bp="' + esc(b.p) + '"' : '') + (b.s ? ' data-bs="' + esc(b.s) + '"' : '') + (b.t != null ? ' data-bt="' + esc(b.t === '' ? '-' : b.t) + '"' : '');
   }
   window.accBlock = function(d, h, k){
     if(!d || !d.atId || !h || !h.name) return '';
     var b = bugunOku(d, h, k);
-    return '<div class="hacc ' + cls(d.atId) + '" data-id="' + esc(d.atId) + '" data-ad="' + esc(h.name) + '"' + (b.m ? ' data-bm="' + b.m + '"' : '') + (b.p ? ' data-bp="' + esc(b.p) + '"' : '') + '>' + inner(d.atId, { dataset: { bm: b.m || '', bp: b.p || '' } }) + '</div>';
+    return '<div class="hacc ' + cls(d.atId) + '" data-id="' + esc(d.atId) + '" data-ad="' + esc(h.name) + '"' + bugunAttr(b) + '>' + inner(d.atId, { dataset: { bm: b.m || '', bp: b.p || '', bs: b.s || '', bt: b.t == null ? '' : (b.t === '' ? '-' : b.t) } }) + '</div>';
   };
   function yenile(id){
     document.querySelectorAll('.hacc[data-id="' + id + '"]').forEach(function(el){
@@ -309,5 +327,5 @@
     S.q.unshift.apply(S.q, gor); pompa();
   };
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) pompa(); });
-  window.__acc = { pistGec: pistGec, adNorm: adNorm, kosuHazirla: kosuHazirla, etiket: etiket, bugunSatiri: bugunSatiri, yolMetni: yolMetni, finisMetni: finisMetni };
+  window.__acc = { pistGec: pistGec, adNorm: adNorm, kosuHazirla: kosuHazirla, etiket: etiket, bugunSatiri: bugunSatiri, bugunSatirlari: bugunSatirlari, yolMetni: yolMetni, finisMetni: finisMetni };
 })();
