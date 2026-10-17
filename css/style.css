@@ -3010,3 +3010,29 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 
 
 
+
+/* ===== Oranlar sekmesi ===== */
+.orn-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px;scrollbar-width:none}
+.orn-chips::-webkit-scrollbar{display:none}
+.orn-chip{flex:none;padding:8px 14px;border-radius:999px;font-size:13.5px;font-weight:700;color:var(--tx);background:var(--sf);border:1px solid var(--ln)}
+.orn-chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.orn-chip.k{padding:7px 12px;font-size:12.5px}
+.orn-saat{font-size:13px;font-weight:700;color:var(--mu);margin:2px 2px 10px}
+.orn-hata{color:#e11d48}
+.orn-bilgi{font-size:12px;color:var(--mu);margin:0 2px 8px}
+.orn-list{background:var(--sf);border:1px solid var(--ln);border-radius:16px;overflow:hidden}
+.orn-r{display:flex;align-items:center;gap:10px;padding:11px 12px}
+.orn-r+.orn-r{border-top:1px solid var(--ln)}
+.orn-n{flex:none;width:30px;height:30px;border-radius:10px;background:var(--sf2);display:grid;place-items:center;font-size:13px;font-weight:800}
+.orn-m{flex:1;min-width:0}
+.orn-m>b{display:block;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orn-z{display:flex;flex-wrap:wrap;align-items:center;gap:3px 5px;margin-top:3px;font-size:13px;color:var(--mu);font-variant-numeric:tabular-nums}
+.orn-z i{font-style:normal;opacity:.55;font-size:11px}
+.orn-v.son{color:var(--tx);font-weight:800}
+.orn-dot{opacity:.6}
+.orn-s{flex:none;text-align:right;min-width:52px}
+.orn-s b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.orn-s small{font-size:11.5px;font-weight:700;color:var(--mu)}
+.orn-s.dn b,.orn-s.dn small{color:#15a34a}
+.orn-s.up b,.orn-s.up small{color:#e11d48}
+.orn-yenile{display:block;margin:14px auto 4px;padding:9px 22px;border-radius:999px;background:var(--sf);border:1px solid var(--ln);font-size:13.5px;font-weight:700;color:var(--tx)}
