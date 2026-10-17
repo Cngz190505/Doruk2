@@ -257,7 +257,8 @@ function takiChips(d){
 }
 // ---- Takı değişimi: atın bir önceki koşusundaki takı ile bugünküyü karşılaştırır (yeşil nokta) ----
 // TJK at sayfasındaki geçmiş tablosunda takı/ekstra sütunu yoksa nokta hiç çıkmaz.
-const TKD = { key: 'gs_takionce_v1', ttl: 12 * 3600 * 1000, c: {}, busy: {}, fail: {}, q: [], run: 0 };
+const TKD_DEBUG = /[?&]tkdebug=1/.test(location.search);   // adresin sonuna ?tkdebug=1 eklenirse nedenini gösterir
+const TKD = { err: {}, key: 'gs_takionce_v1', ttl: 12 * 3600 * 1000, c: {}, busy: {}, fail: {}, q: [], run: 0 };
 try{ TKD.c = JSON.parse(localStorage.getItem(TKD.key) || '{}') || {}; }catch(e){ TKD.c = {}; }
 const tkdKod = t => String(t || '').toLocaleUpperCase('tr-TR').split(/\s+/).filter(x => /^[A-ZÇĞİÖŞÜ]{1,4}$/.test(x));
 const tkdGet = id => { const g = TKD.c[id]; return g && Date.now() - g.ts < TKD.ttl ? g.r : undefined; };
@@ -287,19 +288,27 @@ async function atOncekiTaki(atId){
 }
 function tkdBoya(root, id){
   (root || document).querySelectorAll(id ? `.tkd[data-id="${id}"]` : '.tkd').forEach(el => {
-    const r = tkdGet(el.dataset.id);
-    if(!r || r.n || r.u || r.k == null){ el.hidden = true; return; }
-    const bugun = tkdKod(el.dataset.cur), once = tkdKod(r.k);
-    if(bugun.length === once.length && bugun.every(x => once.includes(x))){ el.hidden = true; return; }
-    el.dataset.t = 'Önceki takılar: ' + (once.join(' ') || 'takısız');
-    el.hidden = false;
+    const r = tkdGet(el.dataset.id), bugun = tkdKod(el.dataset.cur);
+    let neden = '', degisti = false;
+    if(r === undefined) neden = TKD.fail[el.dataset.id] ? 'Hata: TJK sayfası alınamadı (' + (TKD.err[el.dataset.id] || '?') + ')' : 'Önceki takı yükleniyor…';
+    else if(r.n) neden = 'TJK geçmiş tablosunda takı sütunu bulunamadı';
+    else if(r.u) neden = 'Takı sütunu var ama ikon olarak geliyor, okunamadı';
+    else if(r.k == null) neden = 'Önceki takı okunamadı';
+    else {
+      const once = tkdKod(r.k);
+      degisti = !(bugun.length === once.length && bugun.every(x => once.includes(x)));
+      neden = degisti ? 'Önceki takılar: ' + (once.join(' ') || 'takısız') : 'Takı değişmedi (önceki: ' + (once.join(' ') || 'takısız') + ', bugün: ' + bugun.join(' ') + ')';
+    }
+    el.dataset.t = neden;
+    el.classList.toggle('dbg', !degisti);
+    el.hidden = TKD_DEBUG ? false : !degisti;
   });
 }
 function tkdPompa(){
   while(TKD.run < 3 && TKD.q.length){
     const id = TKD.q.shift(); TKD.run++;
     atOncekiTaki(id).then(r => { TKD.c[id] = { ts: Date.now(), r }; try{ localStorage.setItem(TKD.key, JSON.stringify(TKD.c)); }catch(e){} })
-      .catch(() => { TKD.fail[id] = Date.now(); })
+      .catch(e => { TKD.fail[id] = Date.now(); TKD.err[id] = String(e && e.message || e).slice(0, 60); })
       .finally(() => { delete TKD.busy[id]; TKD.run--; tkdBoya(document, id); tkdPompa(); });
   }
 }
@@ -421,7 +430,7 @@ function galopOnYukle(){
 }
 document.addEventListener('visibilitychange', () => { if(!document.hidden) Object.keys(GL).forEach(galipPompa); });
 // Detay panelleri varsayılan AÇIK; kullanıcının kapattıkları burada tutulur
-const _detClosed = new Set();
+const _detAcik = new Set();   // Orijin/sahip/antrenör paneli varsayılan KAPALI; kullanıcının açtıkları burada tutulur
 const detKey = h => city + '|' + race + '|' + h.no;
 // Açılır paneller: sınıf değişir, yükseklik CSS ile yumuşak animasyonlanır (yeniden çizim yok → zıplama yok)
 function animTg(btn, set){
@@ -430,7 +439,12 @@ function animTg(btn, set){
   btn.setAttribute('aria-expanded', open);
   if(open) set.delete(k); else set.add(k);
 }
-function detTg(btn){ animTg(btn, _detClosed); }
+function detTg(btn){
+  const box = btn.parentElement, k = box.dataset.k; if(!k) return;
+  const open = box.classList.toggle('open');
+  btn.setAttribute('aria-expanded', open);
+  if(open) _detAcik.add(k); else _detAcik.delete(k);
+}
 const _moreClosed = new Set();
 function moreTg(btn){ animTg(btn, _moreClosed); }
 // Ekürü: aynı koşuda aynı sahibe ait diğer atlar
@@ -521,7 +535,7 @@ function patchOranlar(){
 }
 function applyOpen(root){
   root.querySelectorAll('.hmore[data-k],.hdet[data-k]').forEach(b => {
-    const kapali = (b.classList.contains('hmore') ? _moreClosed : _detClosed).has(b.dataset.k);
+    const kapali = b.classList.contains('hmore') ? _moreClosed.has(b.dataset.k) : !_detAcik.has(b.dataset.k);
     b.classList.toggle('open', !kapali);
     const s = b.firstElementChild; if(s) s.setAttribute('aria-expanded', String(!kapali));
   });
