@@ -6,7 +6,7 @@
   var ACC_TTL = 12 * 3600 * 1000;        // at sonucu cihazda 12 saat
   var BOS_TTL = 6 * 3600 * 1000;         // boş koşu sayfası 6 saat
   var SON_N = 2;                          // her at için bakılacak son koşu sayısı
-  var KEY = 'gs_acc_v1', RKEY = 'gs_accr_v1_';
+  var KEY = 'gs_acc_v2', RKEY = 'gs_accr_v2_';
   var S = { c: {}, fail: {}, err: {}, busy: {}, q: [], run: 0, fly: {} };
   try { S.c = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e){ S.c = {}; }
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(S.c)); } catch(e){} }
@@ -20,6 +20,12 @@
   }
   function sehirKodu(a){ return adNorm(a).replace(/HIPODROMU$/, ''); }
   function tarihIso(t){ var m = String(t || '').match(/(\d{2})[.\/](\d{2})[.\/](\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : null; }
+  function pistGec(p){
+    p = String(p || '').trim();
+    if(/^K$/i.test(p)) return 'Kum'; if(/^[ÇC]$/i.test(p)) return 'Çim'; if(/^S$/i.test(p)) return 'Sentetik';
+    var m = p.match(/Kum|[ÇC][iİ]m|Sentetik/i); if(!m) return '';
+    return /^k/i.test(m[0]) ? 'Kum' : /^s/i.test(m[0]) ? 'Sentetik' : 'Çim';
+  }
   function sureCevir(v){
     var s = String(v || '').trim().replace(/''/g, '.').replace(/'/g, ':').replace(',', '.');
     var p = s.split(':');
@@ -57,7 +63,7 @@
       atlar[m[1]] = { no: m[1], isim: m[2], sira: ++sayac, sure: sureCevir(c[2]), sonSure: sureCevir(c[7]), mesafe: sayi(c[10]), delta: (c[11] === '-' ? 0 : sayi(c[11])), fark: sayi(c[12]) };
     });
     var hb = String(metin || '').match(/(\d{2}\.\d{2}\.\d{4})\s*\/\s*(\d+)\s*Metre\s*([^\n|]*)/i);
-    return { atlar: atlar, meta: { tarih: hb ? hb[1] : null, mesafe: hb ? +hb[2] : null, pist: hb ? hb[3].trim() : '' } };
+    return { atlar: atlar, meta: { tarih: hb ? hb[1] : null, mesafe: hb ? +hb[2] : null, pist: hb ? pistGec(hb[3]) : '' } };
   }
   // Koşudaki her atın son 100 m sırası (en kısa süre = 1) ile birlikte, saklamaya uygun sade liste
   function kosuHazirla(metin){
@@ -103,13 +109,16 @@
       var iT = heads.findIndex(function(h){ return h.indexOf('tarih') === 0; });
       var iS = heads.findIndex(function(h){ return h === 's' || /^s[ıi]ra/.test(h); });
       var iH = heads.findIndex(function(h){ return /hip|şehir|sehir/.test(h); });
+      var iM = heads.findIndex(function(h){ return /msf|mesafe/.test(h); });
+      var iP = heads.findIndex(function(h, i){ return i !== iM && /pist|zemin/.test(h); });
       if(iT < 0 || iH < 0) continue;
       var out = [];
       for(var i = hi + 1; i < rows.length && out.length < SON_N; i++){
         var td = rows[i].querySelectorAll('td'); if(td.length <= iH || td.length <= iT) continue;
         var t = norm(td[iT].textContent); if(!/\d{2}\.\d{2}\.\d{4}/.test(t)) continue;
         var sr = iS >= 0 && td[iS] ? parseInt(norm(td[iS].textContent), 10) : NaN;
-        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent) });
+        var pt = iP >= 0 && td[iP] ? norm(td[iP].textContent) : (iM >= 0 && td[iM] ? ((td[iM].querySelector('[title],img[alt]') || {}).title || '') : '');
+        out.push({ t: t.match(/\d{2}\.\d{2}\.\d{4}/)[0], sira: isFinite(sr) ? sr : null, hip: norm(td[iH].textContent), pist: pistGec(pt) });
       }
       return out;
     }
@@ -135,7 +144,7 @@
     for(var i = 0; i < rows.length; i++){
       var r = rows[i], iso = tarihIso(r.t), kod = sehirKodu(r.hip); if(!iso || !kod) continue;
       var b = await atiBul(iso, kod, ad);
-      if(b) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, pist: b.k.meta.pist, mesafe: b.k.meta.mesafe, n: b.k.n,
+      if(b) return { t: r.t, hip: r.hip.replace(/\s*Hipodromu$/i, ''), no: b.no, pist: pistGec(b.k.meta.pist) || r.pist || '', mesafe: b.k.meta.mesafe, n: b.k.n,
         sira: r.sira || b.a.sira, delta: b.a.delta, s100: b.a.sure, s100sira: b.a.s100sira };
     }
     return { n: 1 };
@@ -151,20 +160,23 @@
     return { c: 'acc-n', e: '⚪', y: 'Normal koştu' };
   }
   var vir = function(x, d){ return Number(x).toFixed(d == null ? 1 : d).replace('.', ','); };
-  function yolMetni(g){
-    if(g.delta == null) return '';
-    if(g.delta >= 2) return 'Dışarıdan dolaştı, ' + vir(g.delta) + ' m fazla yol koştu. ';
-    if(g.delta <= -2) return 'Kısa yoldan gitti, ' + vir(-g.delta) + ' m az yol koştu. ';
-    return 'Yol farkı az (' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + vir(Math.abs(g.delta)) + ' m). ';
+  // Satırlar: [renk sınıfı, açıklama]. pos=yeşil, warn=turuncu, bad=kırmızı, nt=nötr
+  function yolSatiri(g){
+    if(g.delta == null) return null;
+    if(g.delta >= 2) return ['pos', 'Dışarıdan dolaştı · ' + vir(g.delta) + ' m fazla yol koştu'];
+    if(g.delta <= -2) return ['warn', 'Kısa yoldan gitti · ' + vir(-g.delta) + ' m az yol koştu'];
+    return ['nt', 'Yol farkı az · ' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + vir(Math.abs(g.delta)) + ' m'];
   }
-  function finisMetni(g){
-    if(!g.s100sira) return '';
-    var ucte2 = Math.ceil(g.n * 2 / 3), s = g.s100 ? ' (son 100 m: ' + vir(g.s100, 2) + ')' : '';
-    if(g.s100sira === 1) return 'Finişte koşunun en hızlısıydı' + s + '.';
-    if(g.s100sira <= 3) return 'Finişte koşunun en hızlı 3 atından biriydi' + s + '.';
-    if(g.s100sira > ucte2) return 'Son 100 metrede yavaşladı, bitirişi zayıftı' + s + '.';
-    return 'Finişi ortalamaydı' + s + '.';
+  function finisSatiri(g){
+    if(!g.s100sira || !g.s100) return null;
+    var u1 = Math.ceil(g.n / 3), u2 = Math.ceil(g.n * 2 / 3), sn = vir(g.s100, 2) + ' sn';
+    if(g.s100sira === 1) return ['pos', sn + ' · koşunun en hızlısı'];
+    if(g.s100sira <= u1) return ['pos', sn + ' · ' + g.s100sira + '. en hızlı (' + g.n + ' at içinde)'];
+    if(g.s100sira > u2) return ['bad', sn + ' · yavaşladı, bitirişi zayıf (' + g.s100sira + '. en hızlı)'];
+    return ['nt', sn + ' · ortalama (' + g.s100sira + '. en hızlı)'];
   }
+  function yolMetni(g){ var r = yolSatiri(g); return r ? r[1] + '. ' : ''; }
+  function finisMetni(g){ var r = finisSatiri(g); return r ? r[1] + '.' : ''; }
   function gunMetni(t){
     var m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t || ''); if(!m) return '';
     var n = Math.floor((new Date().setHours(0,0,0,0) - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
@@ -181,11 +193,14 @@
       return '<small>' + E + '</small><b class="gm">Aranıyor…</b>';
     }
     if(g.n === 1 && !g.t) return '<small>' + E + '</small><b class="gm">Accurace verisi yok</b><div class="acc-t">Son koşuları Accurace kapsamında değil.</div>';
-    var e = etiket(g), gun = gunMetni(g.t);
-    var bilgi = [g.t, g.hip, g.mesafe ? g.mesafe + ' m' + (g.pist ? ' ' + g.pist : '') : g.pist, g.no + '. Koşu'].filter(Boolean).map(esc).join(' · ');
-    var sira = g.sira ? ' · <strong>' + g.sira + '. geldi</strong> (' + g.n + ' at)' : ' (' + g.n + ' at)';
-    return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small><b>' + e.e + ' ' + esc(e.y) + '</b>'
-      + '<div class="acc-m">' + bilgi + sira + '</div><div class="acc-t">' + esc(yolMetni(g) + finisMetni(g)) + '</div>';
+    var e = etiket(g), gun = gunMetni(g.t), pist = pistGec(g.pist);
+    var bilgi = [g.t, g.hip, g.mesafe ? g.mesafe + ' m' + (pist ? ' ' + pist : '') : pist, g.no + '. Koşu'].filter(Boolean).map(esc).join(' · ');
+    var satir = function(k, r){ return r ? '<div class="acc-r2"><span class="acc-k">' + k + '</span><span class="acc-v ' + r[0] + '">' + esc(r[1]) + '</span></div>' : ''; };
+    var sirap = g.sira ? '<span class="acc-p">' + g.sira + '. geldi <i>/ ' + g.n + ' at</i></span>' : '<span class="acc-p"><i>' + g.n + ' at</i></span>';
+    return '<small>' + E + (gun ? ' · ' + esc(gun) : '') + '</small>'
+      + '<div class="acc-h"><b>' + e.e + ' ' + esc(e.y) + '</b>' + sirap + '</div>'
+      + '<div class="acc-m">' + bilgi + '</div>'
+      + satir('Yol', yolSatiri(g)) + satir('Son 100 m', finisSatiri(g));
   }
   function cls(id){ var g = get(id); return g && g.t ? etiket(g).c : 'acc-n'; }
   window.accBlock = function(d, h){
@@ -226,5 +241,5 @@
     S.q.unshift.apply(S.q, gor); pompa();
   };
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) pompa(); });
-  window.__acc = { adNorm: adNorm, metinAyristir: metinAyristir, kosuHazirla: kosuHazirla, etiket: etiket, yolMetni: yolMetni, finisMetni: finisMetni };
+  window.__acc = { pistGec: pistGec, adNorm: adNorm, metinAyristir: metinAyristir, kosuHazirla: kosuHazirla, etiket: etiket, yolMetni: yolMetni, finisMetni: finisMetni };
 })();
