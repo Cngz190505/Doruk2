@@ -3037,3 +3037,9 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 .hacc .acc-cv{font-size:14px;color:var(--mu,#5E6B80);transition:transform .2s}
 .hacc details[open] .acc-cv{transform:rotate(180deg)}
 .hacc details.acc-d>.acc-m{margin-top:6px}
+
+/* Ekürü satırı */
+.hek{display:flex;gap:8px;align-items:baseline;margin:6px 0 2px;font-size:12.5px;font-weight:600;color:var(--tx,#0E1B2C)}
+.hek small{flex:0 0 auto;font-size:11px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.02em}
+.hek span{min-width:0;overflow-wrap:anywhere}
+.hek b{font-weight:800}
