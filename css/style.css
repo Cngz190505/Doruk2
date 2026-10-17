@@ -3043,10 +3043,3 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 .hek small{flex:0 0 auto;font-size:11px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.02em}
 .hek span{min-width:0;overflow-wrap:anywhere}
 .hek b{font-weight:800}
-
-/* Accurace rozetleri: yeşil = değişti, kırmızı = sorun */
-.hacc .acc-rzs{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
-.hacc .acc-rz{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.6);font:inherit;font-size:12px;font-weight:700;color:inherit;cursor:pointer}
-.hacc .acc-rz i{width:10px;height:10px;border-radius:50%;background:#9aa4b2;flex:0 0 auto}
-.hacc .acc-rz.g i{background:#16a34a}
-.hacc .acc-rz.r i{background:#dc2626}
