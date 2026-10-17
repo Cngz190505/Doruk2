@@ -3008,3 +3008,8 @@ body.maint .app,body.maint #auth,body.maint #banned{visibility:hidden!important}
 .hek span{min-width:0;overflow-wrap:anywhere}
 .hek b{font-weight:800}
 
+
+/* Takı değişti: yeşil nokta (dokununca önceki takılar yazar) */
+.tkd{position:relative;flex:0 0 auto;align-self:center;width:14px;height:14px;padding:0;border-radius:50%;border:0;background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22);cursor:pointer}
+.tkd::after{content:"";position:absolute;inset:-10px}
+.tkd[hidden]{display:none}
