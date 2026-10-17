@@ -249,10 +249,67 @@ function takiTip(el){
 function takiChips(d){
   const list = (d.takiDetay && d.takiDetay.length) ? d.takiDetay : String(d.taki || '').split(/\s+/).filter(Boolean).map(k => ({k, a: ''}));
   if(!list.length) return '';
-  return `<div class="tkw">${list.map(x => {
+  const nokta = d.atId ? `<button type="button" class="tkd" hidden data-id="${esc(d.atId)}" data-cur="${esc(list.map(x => x.k).join(' '))}" aria-label="Takı değişti" onclick="event.stopPropagation();takiTip(this)"></button>` : '';
+  return `<div class="tkw">${nokta}${list.map(x => {
     const k = String(x.k).toUpperCase(), ac = x.a || TAKI_ACIKLAMA[k] || (TAKI_AD[k] ? TAKI_AD[k] + ' takılacağını ifade eder.' : 'Açıklama bulunamadı.');
     return `<button class="tkc" data-t="${esc(ac)}" onclick="event.stopPropagation();takiTip(this)"><b>${esc(x.k)}</b></button>`;
   }).join('')}</div>`;
+}
+// ---- Takı değişimi: atın bir önceki koşusundaki takı ile bugünküyü karşılaştırır (yeşil nokta) ----
+// TJK at sayfasındaki geçmiş tablosunda takı/ekstra sütunu yoksa nokta hiç çıkmaz.
+const TKD = { key: 'gs_takionce_v1', ttl: 12 * 3600 * 1000, c: {}, busy: {}, fail: {}, q: [], run: 0 };
+try{ TKD.c = JSON.parse(localStorage.getItem(TKD.key) || '{}') || {}; }catch(e){ TKD.c = {}; }
+const tkdKod = t => String(t || '').toLocaleUpperCase('tr-TR').split(/\s+/).filter(x => /^[A-ZÇĞİÖŞÜ]{1,4}$/.test(x));
+const tkdGet = id => { const g = TKD.c[id]; return g && Date.now() - g.ts < TKD.ttl ? g.r : undefined; };
+async function atOncekiTaki(atId){
+  const url = `https://www.tjk.org/TR/yarissever/Query/ConnectedPage/AtKosuBilgileri?1=1&QueryParameter_AtId=${encodeURIComponent(atId)}`;
+  const html = await (await fetchWithTimeout(url, 20000, 1)).text();
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+  const norm = x => String(x || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  for(const tb of dom.querySelectorAll('table')){
+    const rows = Array.from(tb.querySelectorAll('tr'));
+    const hi = rows.findIndex(tr => { const t = norm(tr.textContent); return /Tarih/i.test(t) && /Derece/i.test(t); });
+    if(hi < 0) continue;
+    const heads = Array.from(rows[hi].querySelectorAll('th,td')).map(c => norm(c.textContent).toLowerCase());
+    const iT = heads.findIndex(x => x.startsWith('tarih'));
+    const iX = heads.findIndex(x => /ekstra|tak[ıi]|donan|ekipman/.test(x));
+    if(iT < 0 || iX < 0) return { n: 1 };            // sütun yok → karşılaştırma yapılamaz
+    for(let i = hi + 1; i < rows.length; i++){
+      const td = rows[i].querySelectorAll('td'); if(td.length <= Math.max(iT, iX)) continue;
+      const tarih = (norm(td[iT].textContent).match(/\d{2}\.\d{2}\.\d{4}/) || [])[0]; if(!tarih) continue;
+      const hc = td[iX], txt = norm(hc.textContent);
+      if(!txt && hc.querySelector('img,svg,i')) return { t: tarih, u: 1 };   // yalnız ikon: okunamaz, bilinmiyor say
+      return { t: tarih, k: txt.split(/\s+/).filter(x => /^[A-ZÇĞİÖŞÜ]{1,4}$/.test(x)).join(' ') };
+    }
+    return { n: 1 };
+  }
+  return { n: 1 };
+}
+function tkdBoya(root, id){
+  (root || document).querySelectorAll(id ? `.tkd[data-id="${id}"]` : '.tkd').forEach(el => {
+    const r = tkdGet(el.dataset.id);
+    if(!r || r.n || r.u || r.k == null){ el.hidden = true; return; }
+    const bugun = tkdKod(el.dataset.cur), once = tkdKod(r.k);
+    if(bugun.length === once.length && bugun.every(x => once.includes(x))){ el.hidden = true; return; }
+    el.dataset.t = 'Önceki takılar: ' + (once.join(' ') || 'takısız');
+    el.hidden = false;
+  });
+}
+function tkdPompa(){
+  while(TKD.run < 3 && TKD.q.length){
+    const id = TKD.q.shift(); TKD.run++;
+    atOncekiTaki(id).then(r => { TKD.c[id] = { ts: Date.now(), r }; try{ localStorage.setItem(TKD.key, JSON.stringify(TKD.c)); }catch(e){} })
+      .catch(() => { TKD.fail[id] = Date.now(); })
+      .finally(() => { delete TKD.busy[id]; TKD.run--; tkdBoya(document, id); tkdPompa(); });
+  }
+}
+function takiYukle(root){
+  root.querySelectorAll('.tkd[data-id]').forEach(el => {
+    const id = el.dataset.id; if(tkdGet(id) !== undefined || TKD.busy[id]) return;
+    if(TKD.fail[id] && Date.now() - TKD.fail[id] < 600000) return;
+    TKD.busy[id] = 1; TKD.q.push(id);
+  });
+  tkdBoya(root); tkdPompa();
 }
 // ---- Son galibiyet + son galop (at sayfalarından, cihazda 12 saat saklanır) ----
 const GALIP_TTL = 12 * 3600 * 1000;
@@ -469,7 +526,7 @@ function applyOpen(root){
     const s = b.firstElementChild; if(s) s.setAttribute('aria-expanded', String(!kapali));
   });
 }
-const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list'){ applyOpen(el); galipYukle(el); } } };
+const setHtml = (el, h) => { if(el._h !== h){ el.innerHTML = h; el._h = h; if(el.id === 'horses-list'){ applyOpen(el); galipYukle(el); takiYukle(el); } } };
 function renderBulten(){
   const y = window.scrollY;
   _renderBulten();
