@@ -273,6 +273,11 @@
     <div id="leaderboard-list"></div>
   </section>
 
+  <!-- SEKME: ORANLAR -->
+  <section id="tab-oranlar" class="tab hidden">
+    <div id="oranlar-body"></div>
+  </section>
+
   <!-- SEKME: KURALLAR -->
   <section id="tab-kurallar" class="tab hidden">
     <div id="kurallar-body"></div>
@@ -309,6 +314,7 @@
     <div class="dw-me" id="dw-me" onclick="closeDrawer();openProfile(ME,true)" role="button" aria-label="Profilimi aç"></div>
     <div class="dw-grp">
       <button class="dw-item" id="dw-shop" onclick="closeDrawer();openShop()"></button>
+      <button class="dw-item" id="dw-oranlar" onclick="closeDrawer();switchTab('oranlar')"></button>
       <button class="dw-item" id="dw-kurallar" onclick="closeDrawer();switchTab('kurallar')"></button>
       <button class="dw-item" id="dw-theme" onclick="toggleTheme();paintDrawer()"></button>
       <button class="dw-item hidden" id="dw-inst" onclick="closeDrawer();installApp()"></button>
@@ -488,5 +494,6 @@
 <script src="js/09-chat.js"></script>
 <script src="js/10-install-guide.js"></script>
 <script src="js/11-accurace.js"></script>
+<script src="js/12-oranlar.js"></script>
 </body>
 </html>
